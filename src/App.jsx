@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getNewGameState, BUILDINGS, UPGRADES, getInitialOwned, getInitialUpgrades } from './data/gameData';
+import { getNewGameState, getInitialOwned, getInitialUpgrades, getInitialAchievementData } from './data/gameData';
+import { BUILDINGS } from "./data/buildings";
+import { UPGRADES } from "./data/upgrades";
 import { calculateCurrentGPS, getBuildingCost } from './logic/gameLogic';
 import ProgressButton from './components/ProgressButton';
 import BuildingProgressBar from './components/BuildingProgressBar';
@@ -8,6 +10,10 @@ import './App.css';
 import * as Icons from 'lucide-react'; // Importuje wszystkie ikony
 import { pl } from './locales/pl';
 import { en } from './locales/en';
+import { checkAchievements, applyAchievementReward } from './logic/gameLogic';
+import AchievementsList from './components/AchievementsList';
+import AchievementNotification from "./components/AchievementNotification";
+import { ACHIEVEMENTS } from "./data/achievements";
 
 const TRANSLATIONS = { pl, en };
 
@@ -17,6 +23,7 @@ function App() {
   const [displayGold, setDisplayGold] = useState(0);
   const [displayGPS, setDisplayGPS] = useState(0);
   const [lang, setLang] = useState('pl'); // Domyślny język
+  const [notifications, setNotifications] = useState([]);
 
   // Helper do tłumaczeń
   const t = (path) => {
@@ -31,6 +38,24 @@ function App() {
 
   const addLog = (m) => setLogs(p => [m, ...p].slice(0, 5));
 
+  // Helper do pokazania notyfikacji
+  const showAchievementNotification = (achievementId) => {
+    const ach = ACHIEVEMENTS[achievementId];
+    const newNotif = {
+      id: achievementId,
+      name: ach.name,
+      icon: ach.icon,
+      reward: ach.reward,
+      timestamp: Date.now()
+    };
+    setNotifications(prev => [...prev, newNotif]);
+    
+    // Auto-usuń po 5 sekundach
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== achievementId));
+    }, 5000);
+  };
+
   // --- LOGIKA TICKA, OFFLINE I ZAPISU ---
   useEffect(() => {
     const saved = localStorage.getItem('idleGameSave');
@@ -42,12 +67,14 @@ function App() {
 
         const freshOwned = getInitialOwned();
         const freshUpgrades = getInitialUpgrades();
+        const freshAchievements = getInitialAchievementData();
         
         gameData.current = {
           ...gameData.current,
           ...parsed,
           owned: { ...freshOwned, ...parsed.owned },
           upgrades: { ...freshUpgrades, ...parsed.upgrades },
+          achievementData: { ...freshAchievements, ...parsed.achievementData },
           lastUpdate: now
         };
 
@@ -74,11 +101,23 @@ function App() {
       setDisplayGPS(gps);
     }, 50);
 
+    // Osobny interval do sprawdzania achievements - 1000ms
+    const achievementCheckInterval = setInterval(() => {
+      const newAchievements = checkAchievements(gameData.current);
+      newAchievements.forEach(achId => {
+        applyAchievementReward(gameData.current, achId);
+        showAchievementNotification(achId);
+      });
+    }, 1000);
+
     const saveInt = setInterval(() => {
       localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
     }, 5000);
 
-    return () => { clearInterval(interval); clearInterval(saveInt); };
+    return () => { 
+      clearInterval(interval); 
+      clearInterval(achievementCheckInterval);
+      clearInterval(saveInt); };
   }, []);
 
   // --- AKCJE ZAKUPU ---
@@ -88,6 +127,12 @@ function App() {
       gameData.current.gold -= cost;
       gameData.current.owned[id] += 1;
       addLog(`Kupiono: ${BUILDINGS[id].name}`);
+
+      const newAchievements = checkAchievements(gameData.current);
+      newAchievements.forEach(achId => {
+        applyAchievementReward(gameData.current, achId);
+        showAchievementNotification(achId);
+      });
     }
   };
 
@@ -99,6 +144,12 @@ function App() {
       if (upg.type === 'click') gameData.current.clickPower *= upg.multiplier;
       if (upg.type === 'global') gameData.current.globalMultiplier *= upg.multiplier;
       addLog(`Odblokowano: ${upg.name}`);
+
+      const newAchievements = checkAchievements(gameData.current);
+      newAchievements.forEach(achId => {
+        applyAchievementReward(gameData.current, achId);
+        showAchievementNotification(achId);
+      });
     }
   };
 
@@ -162,7 +213,7 @@ function App() {
           <div className="card shadow-sm border-0">
             <div className="card-body">
               <ProgressButton 
-                label={<><Icons.Hammer size={20} className="me-2" />`Wydobądź ręcznie (+${gameData.current.clickPower})`</>} 
+                label={<><Icons.Hammer size={20} className="me-2" />Wydobądź ręcznie (+${gameData.current.clickPower})</>} 
                 duration={800} 
                 onFinish={() => { gameData.current.gold += gameData.current.clickPower; addLog("Złoto +"+gameData.current.clickPower); }} 
               />
@@ -280,12 +331,20 @@ function App() {
           </div>
         </div>
       );
-    }
+    },
+    achievements: () => (
+      <AchievementsList achievementData={gameData.current.achievementData} />
+    )
 
   };
 
   return (
     <div className="container py-4">
+      {/* Notyfikacja na górze */}
+      <AchievementNotification 
+        notifications={notifications} 
+        onRemove={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} 
+      />
       <nav className="navbar navbar-dark bg-dark rounded shadow-lg mb-4 px-3">
         <div className="d-flex align-items-center">
           <span className="h4 m-0 text-warning me-3">💰 {displayGold.toLocaleString()}</span>
@@ -301,9 +360,13 @@ function App() {
           {/* Przycisk Prestiżu - pojawia się powyżej 500k złota */}
           {(gameData.current.gold > 500000 || gameData.current.prestigePoints > 0) && (
             <button className={`btn btn-sm ${currentView==='prestige'?'btn-warning text-dark':'btn-outline-warning'}`} onClick={() => setCurrentView('prestige')}>
-              <Zap size={16} className="me-1"/> {t('ui.prestige')}
+              <Icons.Zap size={16} className="me-1"/> {t('ui.prestige')}
             </button>
           )}
+          <button className={`btn btn-sm ${currentView==='achievements'?'btn-light':'btn-outline-light'}`} 
+              onClick={() => setCurrentView('achievements')}>
+            <Icons.Trophy size={16} className="me-1" /> {t('ui.achievements')}
+          </button>
           <button className={`btn btn-sm ${currentView==='stats'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('stats')}>
             <Icons.BarChart3 size={16} className="me-1" /> {t('ui.stats')}
           </button>

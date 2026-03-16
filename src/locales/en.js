@@ -12,6 +12,7 @@ export const en = {
     reset: "Reset Save",
     continue: "Continue",
     new_game: "New Game",
+    achievements: "Achievements",
     offline_msg: "You were away for {{time}} min. Offline earnings: {{earned}} 💰"
   },
   buildings: {
