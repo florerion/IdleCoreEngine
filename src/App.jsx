@@ -68,6 +68,7 @@ function App() {
       gameData.current.lastUpdate = now;
       
       const gps = calculateCurrentGPS(gameData.current);
+      gameData.current.gps = gps;
       gameData.current.gold += (gps * dt);
       
       setDisplayGold(Math.floor(gameData.current.gold));

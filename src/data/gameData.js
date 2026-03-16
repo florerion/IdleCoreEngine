@@ -41,7 +41,7 @@ export const getInitialUpgrades = () =>
 // Wzorzec stanu (używamy funkcji, by za każdym razem dostać nowy obiekt)
 export const getNewGameState = () => ({
   gold: 0,
-  goldPerSec: 0,
+  gps: 0,
   clickPower: 10,
   globalMultiplier: 1,
   prestigePoints: 0,
