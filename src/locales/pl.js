@@ -12,6 +12,7 @@ export const pl = {
     reset: "Resetuj zapis",
     continue: "Kontynuuj",
     new_game: "Nowa Gra",
+    achievements: "Achievementy",
     offline_msg: "Wróciłeś po {{time}} min. Zarobek offline: {{earned}} 💰"
   },
   buildings: {
