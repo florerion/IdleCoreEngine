@@ -1,35 +1,16 @@
-export const BUILDINGS = {
-  miner: { 
-    id: 'miner', 
-    name: 'Górnik', 
-    icon: 'Pickaxe', // Nazwa ikony z biblioteki
-    baseCost: 15, 
-    baseRate: 1, 
-    description: 'Wydobywa 1/s' 
-  },
-  drill: { 
-    id: 'drill', 
-    name: 'Wiertło', 
-    icon: 'Drill', 
-    baseCost: 100, 
-    baseRate: 5, 
-    description: 'Generuje 5/s' 
-  },
-  factory: { 
-    id: 'factory', 
-    name: 'Fabryka', 
-    icon: 'Factory', 
-    baseCost: 1000, 
-    baseRate: 25, 
-    description: 'Produkcja 25/s' 
-  }
-};
+import { ACHIEVEMENTS } from "./achievements";
+import { BUILDINGS } from "./buildings";
+import { UPGRADES } from "./upgrades";
 
-export const UPGRADES = {
-  sharp_pickaxe: { id: 'sharp_pickaxe', name: 'Ostre Kilofy', cost: 150, description: 'Ręczne x2', type: 'click', multiplier: 2 },
-  miner_motivation: { id: 'miner_motivation', name: 'Motywacja', cost: 300, description: 'Górnicy x2', type: 'building', targets: ['miner'], multiplier: 2 },
-  cosmic_energy: { id: 'cosmic_energy', name: 'Energia', cost: 5000, description: 'Global x2', type: 'global', multiplier: 2 }
-};
+export const getInitialAchievementData = () =>
+  Object.keys(ACHIEVEMENTS).reduce((acc, key) => ({
+    ...acc,
+    [key]: {
+      unlocked: false,
+      unlockedAt: null,
+      progress: 0
+    }
+  }), {});
 
 // Funkcje generujące "czyste" mapy posiadania
 export const getInitialOwned = () => 
@@ -48,6 +29,7 @@ export const getNewGameState = () => ({
   prestigeMultiplier: 1,
   owned: getInitialOwned(),
   upgrades: getInitialUpgrades(),
+  achievementData: getInitialAchievementData(),
   lastUpdate: Date.now()
 });
 
