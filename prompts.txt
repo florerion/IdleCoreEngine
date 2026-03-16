@@ -1,0 +1,14 @@
+2. Przykładowy "Prompt Startowy"
+Możesz skopiować i zapisać sobie coś takiego:
+"Cześć, pracujemy nad grą Idle w React + Bootstrap. Oto obecna architektura:
+buildings.js: Definiuje obiekty z baseCost i baseRate.
+upgrades.js: Definiuje ulepszenia z polami type, targets i multiplier.
+gameLogic.js: Zawiera funkcję calculateCurrentGPS(data), która przelicza produkcję na sekundę.
+App.jsx: Główny stan gameData (gold, gps, owned, upgrades). Wykorzystuje useRef dla wydajności i requestAnimationFrame dla pasków postępu.
+Chciałbym teraz dodać [TWOJA NOWA FUNKCJA]."
+3. Narzędzia pomocnicze
+Jeśli projekt bardzo urośnie, możesz użyć:
+Tree command: Wpisz tree /f w terminalu Windows, by skopiować listę plików.
+Repomix / AI Context Builders: Istnieją małe skrypty, które łączą Twoje pliki .js/.jsx w jeden duży plik tekstowy, który możesz wkleić do czatu (np. narzędzie repomix lub po prostu ręczne kopiuj-wklej kluczowych plików).
+4. Komentarze w kodzie
+Warto zostawić w pliku gameLogic.js krótki komentarz na górze, opisujący np. wzór na koszt budynku (Cost = Base * 1.15^N). To pozwoli AI od razu zrozumieć matematykę Twojej gry.
