@@ -2,6 +2,16 @@ import React from 'react';
 import * as Icons from 'lucide-react';
 import { ACHIEVEMENTS } from '../data/achievements';
 
+/**
+ * Renders a stack of dismissible toast notifications for newly unlocked achievements.
+ * Positioned fixed in the top-right corner of the viewport.
+ *
+ * @param {Object} props
+ * @param {Array<{id: string, name: string, icon: string, reward: Object, timestamp: number}>} props.notifications
+ *   Active notifications to display
+ * @param {function(string): void} props.onRemove - Callback invoked with the notification ID when dismissed
+ * @param {function(string, Object=): string} props.t - Translation helper function
+ */
 export default function AchievementNotification({ notifications, onRemove, t }) {
   return (
     <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 1000 }}>

@@ -7,7 +7,7 @@ import ProgressButton from './components/ProgressButton';
 import BuildingProgressBar from './components/BuildingProgressBar';
 import Logger from './components/Logger';
 import './App.css';
-import * as Icons from 'lucide-react'; // Importuje wszystkie ikony
+import * as Icons from 'lucide-react';
 import { pl } from './locales/pl';
 import { en } from './locales/en';
 import { es } from './locales/es';
@@ -24,10 +24,21 @@ function App() {
   const [logs, setLogs] = useState([pl.logs.system_active]);
   const [displayGold, setDisplayGold] = useState(0);
   const [displayGPS, setDisplayGPS] = useState(0);
-  const [lang, setLang] = useState('pl'); // Domyślny język
+  const [lang, setLang] = useState('pl');
   const [notifications, setNotifications] = useState([]);
 
-  // Helper do tłumaczeń z obsługą szablonów {{var}}
+  /**
+   * Resolves a dot-separated translation key to a string in the active language,
+   * then replaces `{{var}}` template placeholders with the provided values.
+   * Falls back to the raw key string if the path does not exist in the translation map.
+   *
+   * @param {string} path - Dot-separated key path (e.g. 'ui.buy_cost')
+   * @param {Object.<string, string|number>} [vars={}] - Template variables to substitute
+   * @returns {string} Translated and interpolated string
+   * @example
+   * t('ui.buy_cost', { cost: 150 }); // "Buy (150)"
+   * t('nonexistent.key');            // "nonexistent.key"
+   */
   const t = (path, vars = {}) => {
     let str = path.split('.').reduce((obj, key) => obj?.[key], TRANSLATIONS[lang]) || path;
     return Object.entries(vars).reduce((s, [k, v]) => s.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v), str);
@@ -35,9 +46,21 @@ function App() {
 
   const gameData = useRef(getNewGameState());
 
+  /**
+   * Prepends a message to the activity log and keeps only the 5 most recent entries.
+   *
+   * @param {string} m - Log message to display
+   */
   const addLog = (m) => setLogs(p => [m, ...p].slice(0, 5));
 
-  // Helper do pokazania notyfikacji
+  /**
+   * Displays a toast notification for a newly unlocked achievement.
+   * The notification is automatically removed after 5 seconds.
+   *
+   * @param {string} achievementId - ID of the achievement that was unlocked
+   * @example
+   * showAchievementNotification('firstGold');
+   */
   const showAchievementNotification = (achievementId) => {
     const ach = ACHIEVEMENTS[achievementId];
     const newNotif = {
@@ -49,13 +72,13 @@ function App() {
     };
     setNotifications(prev => [...prev, newNotif]);
     
-    // Auto-usuń po 5 sekundach
+    // Auto-remove after 5 seconds
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== achievementId));
     }, 5000);
   };
 
-  // --- LOGIKA TICKA, OFFLINE I ZAPISU ---
+  // --- TICK, OFFLINE PROGRESS, AND AUTO-SAVE ---
   useEffect(() => {
     const saved = localStorage.getItem('idleGameSave');
     if (saved) {
@@ -68,6 +91,7 @@ function App() {
         const freshUpgrades = getInitialUpgrades();
         const freshAchievements = getInitialAchievementData();
         
+        // Merge saved data on top of fresh defaults to handle newly added buildings/upgrades
         gameData.current = {
           ...gameData.current,
           ...parsed,
@@ -101,7 +125,7 @@ function App() {
       setDisplayGPS(gps);
     }, 50);
 
-    // Osobny interval do sprawdzania achievements - 1000ms
+    // Separate interval for achievement checks to avoid running every 50ms tick
     const achievementCheckInterval = setInterval(() => {
       const newAchievements = checkAchievements(gameData.current);
       newAchievements.forEach(achId => {
@@ -120,7 +144,14 @@ function App() {
       clearInterval(saveInt); };
   }, []);
 
-  // --- AKCJE ZAKUPU ---
+  // --- PURCHASE ACTIONS ---
+  /**
+   * Attempts to purchase one unit of the specified building using the current gold.
+   * Deducts the cost, increments the owned count, logs the transaction, and checks
+   * whether any achievements were newly unlocked as a result.
+   *
+   * @param {string} id - Building identifier (key in BUILDINGS)
+   */
   const handleBuyBuilding = (id) => {
     const cost = getBuildingCost(id, gameData.current.owned[id]);
     if (gameData.current.gold >= cost) {
@@ -136,6 +167,14 @@ function App() {
     }
   };
 
+  /**
+   * Attempts to purchase the specified upgrade using the current gold.
+   * Each upgrade can only be purchased once. Applying a 'click' upgrade immediately
+   * increases clickPower; a 'global' upgrade increases the globalMultiplier.
+   * Checks for newly unlocked achievements after each successful purchase.
+   *
+   * @param {string} id - Upgrade identifier (key in UPGRADES)
+   */
   const handleBuyUpgrade = (id) => {
     const upg = UPGRADES[id];
     if (gameData.current.gold >= upg.cost && !gameData.current.upgrades[id]) {
@@ -153,32 +192,41 @@ function App() {
     }
   };
 
+  /**
+   * Executes the prestige reset flow:
+   * 1. Calculates how many prestige points would be gained; aborts if zero.
+   * 2. Prompts the user for confirmation showing the gain and bonus preview.
+   * 3. On confirmation: resets all progress to a fresh game state while carrying
+   *    over accumulated prestige points and applying the prestige multiplier
+   *    (each prestige point grants +10% to all production).
+   * 4. Immediately persists the new state to localStorage.
+   */
   const handlePrestige = () => {
     const gain = calculatePrestigeGain(gameData.current.gold);
     
-    // 1. Sprawdzamy czy w ogóle można (walidacja)
+    // Validate that a prestige reset would actually yield points
     if (gain <= 0) {
       addLog(t('logs.prestige_low'));
       return;
     }
 
-    // 2. WYMAGANE POTWIERDZENIE
+    // Show a confirmation dialog with the potential gain and resulting bonus
     const confirmMsg = t('prestige.confirm', { gain, percent: gain * 10 });
 
     if (window.confirm(confirmMsg)) {
       const totalPoints = (gameData.current.prestigePoints || 0) + gain;
       
-      // 3. GENERUJEMY NOWY STAN (korzystając z bezpiecznej funkcji-wzorca)
+      // Build a clean new game state, then overlay prestige-persistent values
       const newState = getNewGameState(); 
       
       gameData.current = {
         ...newState,
         prestigePoints: totalPoints,
-        prestigeMultiplier: 1 + (totalPoints * 0.1), // Każdy pkt to +10%
+        prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
         lastUpdate: Date.now()
       };
 
-      // 4. RESET UI I POWIADOMIENIE
+      // Reset the log and notify the player about the new era
       setLogs([
         t('logs.era_started', { n: totalPoints }),
         t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
@@ -186,12 +234,12 @@ function App() {
       ].slice(0, 5));
       setCurrentView('main');
       
-      // Opcjonalnie: wymuszamy zapis natychmiast po prestiżu
+      // Persist immediately so progress is not lost on a page reload
       localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
     }
   };
 
-  // --- DEFINICJE WIDOKÓW ---
+  // --- VIEW DEFINITIONS ---
   const VIEWS = {
     menu: () => (
       <div className="text-center py-5 bg-light rounded shadow-sm border mt-4">
@@ -240,14 +288,14 @@ function App() {
                       <div className="d-flex justify-content-between align-items-center">
                         
                         <div className="d-flex align-items-center">
-                          {/* KONTENER IKONY + PASKA + MONET */}
+                          {/* Icon container with progress bar overlay */}
                           <div className="position-relative me-3 d-flex align-items-center justify-content-center" 
                               style={{ width: '32px', height: '32px', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
                             <div className="text-primary">
                               <IconComponent size={20} />
                             </div>
                             
-                            {/* Pasek i monety renderują się TYLKO jeśli mamy budynek */}
+                            {/* Progress bar and coins are rendered only when the building is owned */}
                             {count > 0 && (
                               <div style={{ position: 'absolute', bottom: '-2px', left: '4px', right: '4px' }}>
                                 <BuildingProgressBar interval={1000} />
@@ -368,7 +416,7 @@ function App() {
           <button className={`btn btn-sm ${currentView==='upgrades'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('upgrades')}>
             <Icons.TrendingUp size={16} className="me-1" /> {t('ui.upgrades')}
           </button>
-          {/* Przycisk Prestiżu - pojawia się powyżej 500k złota */}
+          {/* Prestige button — visible only above 500k gold or when prestige has been used */}
           {(gameData.current.gold > 500000 || gameData.current.prestigePoints > 0) && (
             <button className={`btn btn-sm ${currentView==='prestige'?'btn-warning text-dark':'btn-outline-warning'}`} onClick={() => setCurrentView('prestige')}>
               <Icons.Zap size={16} className="me-1"/> {t('ui.prestige')}

@@ -1,20 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Icons from 'lucide-react';
 
+/**
+ * A compact progress bar that visually represents one production cycle for a building.
+ * Fills from 0% to 100% over the given interval (in ms), then resets and spawns
+ * a floating coin particle animation to signal a completed production tick.
+ * Uses `requestAnimationFrame` for smooth, frame-accurate updates.
+ *
+ * @param {Object} props
+ * @param {number} [props.interval=1000] - Duration of one production cycle in milliseconds
+ */
 const BuildingProgressBar = ({ interval = 1000 }) => {
   const [progress, setProgress] = useState(0);
   const [particles, setParticles] = useState([]);
   const lastTickRef = useRef(0);
   const requestRef = useRef();
 
-  // 1. Definicja funkcji tworzącej monetę
+  // Spawns a coin particle with a slight random horizontal offset
   const spawnCoin = () => {
     const id = Date.now();
-    const offset = (Math.random() * 20 - 10) + 'px'; // Lekki rozrzut lewo/prawo
+    const offset = (Math.random() * 20 - 10) + 'px'; // Slight left/right spread
     
     setParticles(prev => [...prev, { id, offset }]);
     
-    // Usuwamy monetę po zakończeniu animacji (1.2s zgodnie z nowym CSS)
+    // Remove the coin after its CSS animation completes (1.2s)
     setTimeout(() => {
       setParticles(prev => prev.filter(p => p.id !== id));
     }, 1200);
@@ -24,14 +33,13 @@ const BuildingProgressBar = ({ interval = 1000 }) => {
     const update = () => {
       const now = Date.now();
       
-      // Obliczamy aktualny cykl (np. ile sekund minęło od początku działania strony)
+      // Derive the current cycle index from wall-clock time so all bars stay in sync
       const currentCycle = Math.floor(now / interval);
       
-      // Obliczamy procent postępu (0-100)
+      // Progress percentage within the current cycle (0–100)
       const p = ((now % interval) / interval) * 100;
       
-      // --- TUTAJ WYWOŁUJEMY spawnCoin ---
-      // Jeśli numer cyklu się zmienił, oznacza to, że minęła kolejna sekunda (tick)
+      // When the cycle index advances, a new production tick has completed
       if (currentCycle > lastTickRef.current) {
         spawnCoin();
         lastTickRef.current = currentCycle;
@@ -47,21 +55,21 @@ const BuildingProgressBar = ({ interval = 1000 }) => {
 
   return (
     <div className="position-relative" style={{ height: '3px', width: '100%' }}>
-      {/* Renderowanie cząsteczek monet */}
+      {/* Coin particles emitted on each production tick */}
       {particles.map(p => (
         <div 
           key={p.id} 
           className="coin-particle" 
           style={{ 
             left: `calc(50% + ${p.offset})`, 
-            top: '-15px' // Wypchnięcie w górę, aby startowało z ikony
+            top: '-15px' // Start above the icon
           }}
         >
           <Icons.Coins size={14} />
         </div>
       ))}
       
-      {/* Pasek postępu */}
+      {/* Progress bar */}
       <div className="progress" style={{ height: '100%', backgroundColor: '#f0f0f0' }}>
         <div 
           className="progress-bar bg-info" 
