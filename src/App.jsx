@@ -33,12 +33,6 @@ function App() {
     return Object.entries(vars).reduce((s, [k, v]) => s.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v), str);
   };
 
-  // Cykl przez wszystkie języki
-  const cycleLang = () => setLang(prev => {
-    const idx = LANGS.indexOf(prev);
-    return LANGS[(idx + 1) % LANGS.length];
-  });
-
   const gameData = useRef(getNewGameState());
 
   const addLog = (m) => setLogs(p => [m, ...p].slice(0, 5));
@@ -208,9 +202,17 @@ function App() {
           </button>
           <button className="btn btn-outline-danger btn-sm" onClick={() => { localStorage.clear(); window.location.reload(); }}>{t('ui.reset')}</button>
           <div className="mt-4 border-top pt-3">
-            <button className="btn btn-sm btn-outline-secondary" onClick={cycleLang}>
-              🌐 {t('ui.lang_name')}
-            </button>
+            <div className="btn-group" role="group" aria-label="Language selector">
+              {LANGS.map(l => (
+                <button
+                  key={l}
+                  className={`btn btn-sm ${lang === l ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                  onClick={() => setLang(l)}
+                >
+                  {TRANSLATIONS[l].ui.lang_name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
