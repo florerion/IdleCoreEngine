@@ -13,11 +13,61 @@ export const pl = {
     continue: "Kontynuuj",
     new_game: "Nowa Gra",
     achievements: "Achievementy",
-    offline_msg: "Wróciłeś po {{time}} min. Zarobek offline: {{earned}} 💰"
+    offline_msg: "Wróciłeś po {{time}} min. Zarobek offline: {{earned}} 💰",
+    click_label: "Wydobądź ręcznie (+{{power}})",
+    gold_plus: "Złoto +{{power}}",
+    buy_cost: "Kup: {{cost}} 💰",
+    upgrade_buy_btn: "Kup ({{cost}})",
+    lang_name: "Polski",
+    log_title: "Dziennik",
+  },
+  logs: {
+    system_active: "Systemy aktywne...",
+    buy_building: "Kupiono: {{name}}",
+    buy_upgrade: "Odblokowano: {{name}}",
+    prestige_low: "Za mało złota na wykonanie prestiżu!",
+    era_started: "ERA {{n}} ROZPOCZĘTA!",
+    prestige_multiplier: "Mnożnik prestiżu: x{{val}}",
+  },
+  prestige: {
+    title: "Laboratorium Alchemii",
+    points: "Punkty Prestiżu",
+    bonus: "Obecny bonus",
+    possible_gain: "Możliwy zysk",
+    pts: "pkt",
+    requirement: "(Wymagane min. 1M złota, aby zyskać punkty)",
+    execute: "Wykonaj Prestiż (Reset)",
+    confirm: "Czy na pewno chcesz wykonać Prestiż?\n\nStracisz wszystkie budynki i złoto, ale otrzymasz +{{gain}} pkt Prestiżu.\nTwoja produkcja wzrośnie o kolejne {{percent}}%!",
+  },
+  stats: {
+    title: "Statystyki Imperium",
+    gold: "Złoto",
+    speed: "Prędkość",
+    click: "Klik",
+    back: "Powrót",
+  },
+  upgrades_shop: {
+    title: "Sklep z ulepszeniami",
+  },
+  achievements_page: {
+    title: "🏆 Osiągnięcia",
+    unlocked: "✓ Osiągnięte",
+    production_bonus: "+{{pct}}% do produkcji",
+  },
+  upgrades: {
+    sharp_pickaxe: { name: "Ostre Kilofy", desc: "Ręczne x2" },
+    miner_motivation: { name: "Motywacja", desc: "Górnicy x2" },
+    cosmic_energy: { name: "Energia", desc: "Global x2" },
+  },
+  achievements: {
+    firstGold: { name: "Pierwsze kroki", desc: "Zarabiaj 100 złota" },
+    minerCollector: { name: "Kolekcjoner górników", desc: "Posiadaj 5 górników" },
+    moneyMaker: { name: "Zarobek", desc: "Zarabiaj 10000 złota" },
+    speedDemon: { name: "Szybkie tempo", desc: "Osiągnij 50 GPS" },
   },
   buildings: {
     miner: { name: "Górnik", desc: "Wydobywa 1/s" },
     drill: { name: "Wiertło", desc: "Generuje 5/s" },
-    factory: {name: "Fabryka", desc: "Produkcja 25/s"}
+    factory: { name: "Fabryka", desc: "Produkcja 25/s" },
   }
 };

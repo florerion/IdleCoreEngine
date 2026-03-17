@@ -1,10 +1,10 @@
 import * as Icons from 'lucide-react';
 import { ACHIEVEMENTS } from "../data/achievements";
 
-export default function AchievementsList({ achievementData }) {
+export default function AchievementsList({ achievementData, t }) {
   return (
     <div className="card shadow-sm p-4 mt-2 border-0">
-      <h5>🏆 Osiągnięcia</h5>
+      <h5>{t('achievements_page.title')}</h5>
       <div className="row mt-3">
         {Object.entries(ACHIEVEMENTS).map(([id, ach]) => {
           const IconComponent = Icons[ach.icon] || Icons.HelpCircle; // ← Fallback
@@ -17,14 +17,14 @@ export default function AchievementsList({ achievementData }) {
                 <div className="d-flex align-items-center">
                   <IconComponent size={32} className="me-2 text-primary" /> {/* ← Renderuj ikonę */}
                   <div className="flex-grow-1">
-                    <h6 className="m-0">{ach.name}</h6>
-                    <small className="text-muted">{ach.description}</small>
+                    <h6 className="m-0">{t(`achievements.${id}.name`)}</h6>
+                    <small className="text-muted">{t(`achievements.${id}.desc`)}</small>
                     {!achData.unlocked && (
                       <div className="progress mt-1" style={{ height: '5px' }}>
                         <div className="progress-bar" style={{ width: `${percentage}%` }}></div>
                       </div>
                     )}
-                    {achData.unlocked && <small className="text-success">✓ Osiągnięte</small>}
+                    {achData.unlocked && <small className="text-success">{t('achievements_page.unlocked')}</small>}
                   </div>
                 </div>
               </div>

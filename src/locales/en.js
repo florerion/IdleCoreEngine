@@ -13,11 +13,61 @@ export const en = {
     continue: "Continue",
     new_game: "New Game",
     achievements: "Achievements",
-    offline_msg: "You were away for {{time}} min. Offline earnings: {{earned}} 💰"
+    offline_msg: "You were away for {{time}} min. Offline earnings: {{earned}} 💰",
+    click_label: "Manual Mine (+{{power}})",
+    gold_plus: "Gold +{{power}}",
+    buy_cost: "Buy: {{cost}} 💰",
+    upgrade_buy_btn: "Buy ({{cost}})",
+    lang_name: "English",
+    log_title: "Journal",
+  },
+  logs: {
+    system_active: "Systems active...",
+    buy_building: "Purchased: {{name}}",
+    buy_upgrade: "Unlocked: {{name}}",
+    prestige_low: "Not enough gold for prestige!",
+    era_started: "ERA {{n}} STARTED!",
+    prestige_multiplier: "Prestige multiplier: x{{val}}",
+  },
+  prestige: {
+    title: "Alchemy Laboratory",
+    points: "Prestige Points",
+    bonus: "Current bonus",
+    possible_gain: "Possible gain",
+    pts: "pts",
+    requirement: "(Minimum 1M gold required to earn points)",
+    execute: "Execute Prestige (Reset)",
+    confirm: "Are you sure you want to Prestige?\n\nYou will lose all buildings and gold, but receive +{{gain}} Prestige points.\nYour production will increase by another {{percent}}%!",
+  },
+  stats: {
+    title: "Empire Statistics",
+    gold: "Gold",
+    speed: "Speed",
+    click: "Click",
+    back: "Back",
+  },
+  upgrades_shop: {
+    title: "Upgrade Shop",
+  },
+  achievements_page: {
+    title: "🏆 Achievements",
+    unlocked: "✓ Unlocked",
+    production_bonus: "+{{pct}}% to production",
+  },
+  upgrades: {
+    sharp_pickaxe: { name: "Sharp Pickaxes", desc: "Manual x2" },
+    miner_motivation: { name: "Motivation", desc: "Miners x2" },
+    cosmic_energy: { name: "Cosmic Energy", desc: "Global x2" },
+  },
+  achievements: {
+    firstGold: { name: "First Steps", desc: "Earn 100 gold" },
+    minerCollector: { name: "Miner Collector", desc: "Own 5 miners" },
+    moneyMaker: { name: "Money Maker", desc: "Earn 10000 gold" },
+    speedDemon: { name: "Speed Demon", desc: "Reach 50 GPS" },
   },
   buildings: {
     miner: { name: "Miner", desc: "Produces 1/s" },
     drill: { name: "Drill", desc: "Generates 5/s" },
-    factory: {name: "Factory", desc: "Produces 25/s"}
+    factory: { name: "Factory", desc: "Produces 25/s" },
   }
 };

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getNewGameState, getInitialOwned, getInitialUpgrades, getInitialAchievementData } from './data/gameData';
 import { BUILDINGS } from "./data/buildings";
 import { UPGRADES } from "./data/upgrades";
-import { calculateCurrentGPS, getBuildingCost } from './logic/gameLogic';
+import { calculateCurrentGPS, getBuildingCost, calculatePrestigeGain } from './logic/gameLogic';
 import ProgressButton from './components/ProgressButton';
 import BuildingProgressBar from './components/BuildingProgressBar';
 import Logger from './components/Logger';
@@ -10,29 +10,34 @@ import './App.css';
 import * as Icons from 'lucide-react'; // Importuje wszystkie ikony
 import { pl } from './locales/pl';
 import { en } from './locales/en';
+import { es } from './locales/es';
 import { checkAchievements, applyAchievementReward } from './logic/gameLogic';
 import AchievementsList from './components/AchievementsList';
 import AchievementNotification from "./components/AchievementNotification";
 import { ACHIEVEMENTS } from "./data/achievements";
 
-const TRANSLATIONS = { pl, en };
+const TRANSLATIONS = { pl, en, es };
+const LANGS = ['pl', 'en', 'es'];
 
 function App() {
   const [currentView, setCurrentView] = useState('menu');
-  const [logs, setLogs] = useState(["Systemy aktywne..."]);
+  const [logs, setLogs] = useState([pl.logs.system_active]);
   const [displayGold, setDisplayGold] = useState(0);
   const [displayGPS, setDisplayGPS] = useState(0);
   const [lang, setLang] = useState('pl'); // Domyślny język
   const [notifications, setNotifications] = useState([]);
 
-  // Helper do tłumaczeń
-  const t = (path) => {
-    // path np. "ui.gold" -> zwraca TRANSLATIONS['pl']['ui']['gold']
-    return path.split('.').reduce((obj, key) => obj?.[key], TRANSLATIONS[lang]) || path;
+  // Helper do tłumaczeń z obsługą szablonów {{var}}
+  const t = (path, vars = {}) => {
+    let str = path.split('.').reduce((obj, key) => obj?.[key], TRANSLATIONS[lang]) || path;
+    return Object.entries(vars).reduce((s, [k, v]) => s.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v), str);
   };
 
-  // Funkcja do zmiany języka
-  const toggleLang = () => setLang(prev => prev === 'pl' ? 'en' : 'pl');
+  // Cykl przez wszystkie języki
+  const cycleLang = () => setLang(prev => {
+    const idx = LANGS.indexOf(prev);
+    return LANGS[(idx + 1) % LANGS.length];
+  });
 
   const gameData = useRef(getNewGameState());
 
@@ -83,7 +88,7 @@ function App() {
           const earned = Math.floor(gps * secondsAway);
           if (earned > 0) {
             gameData.current.gold += earned;
-            addLog(`Zarobek offline: ${earned.toLocaleString()} 💰`);
+            addLog(t('ui.offline_msg', { time: Math.floor(secondsAway / 60), earned: earned.toLocaleString() }));
           }
         }
       } catch (e) { console.error("Błąd wczytywania", e); }
@@ -127,7 +132,7 @@ function App() {
     if (gameData.current.gold >= cost) {
       gameData.current.gold -= cost;
       gameData.current.owned[id] += 1;
-      addLog(`Kupiono: ${BUILDINGS[id].name}`);
+      addLog(t('logs.buy_building', { name: t(`buildings.${id}.name`) }));
 
       const newAchievements = checkAchievements(gameData.current);
       newAchievements.forEach(achId => {
@@ -144,7 +149,7 @@ function App() {
       gameData.current.upgrades[id] = true;
       if (upg.type === 'click') gameData.current.clickPower *= upg.multiplier;
       if (upg.type === 'global') gameData.current.globalMultiplier *= upg.multiplier;
-      addLog(`Odblokowano: ${upg.name}`);
+      addLog(t('logs.buy_upgrade', { name: t(`upgrades.${id}.name`) }));
 
       const newAchievements = checkAchievements(gameData.current);
       newAchievements.forEach(achId => {
@@ -159,14 +164,12 @@ function App() {
     
     // 1. Sprawdzamy czy w ogóle można (walidacja)
     if (gain <= 0) {
-      addLog("Za mało złota na wykonanie prestiżu!");
+      addLog(t('logs.prestige_low'));
       return;
     }
 
     // 2. WYMAGANE POTWIERDZENIE
-    const confirmMsg = `Czy na pewno chcesz wykonać Prestiż?\n\n` +
-                      `Stracisz wszystkie budynki i złoto, ale otrzymasz +${gain} pkt Prestiżu.\n` +
-                      `Twoja produkcja wzrośnie o kolejne ${(gain * 10)}%!`;
+    const confirmMsg = t('prestige.confirm', { gain, percent: gain * 10 });
 
     if (window.confirm(confirmMsg)) {
       const totalPoints = (gameData.current.prestigePoints || 0) + gain;
@@ -182,7 +185,11 @@ function App() {
       };
 
       // 4. RESET UI I POWIADOMIENIE
-      setLogs([`ERA ${totalPoints} ROZPOCZĘTA!`, `Mnożnik prestiżu: x${gameData.current.prestigeMultiplier.toFixed(1)}`, ...logs].slice(0, 5));
+      setLogs([
+        t('logs.era_started', { n: totalPoints }),
+        t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
+        ...logs
+      ].slice(0, 5));
       setCurrentView('main');
       
       // Opcjonalnie: wymuszamy zapis natychmiast po prestiżu
@@ -197,12 +204,12 @@ function App() {
         <h1 className="display-4">Idle Core Engine</h1>
         <div className="d-grid gap-2 col-md-4 mx-auto mt-4">
           <button className="btn btn-primary btn-lg shadow" onClick={() => setCurrentView('main')}>
-            {displayGold > 0 ? "Kontynuuj" : "Graj"}
+            {displayGold > 0 ? t('ui.continue') : t('ui.new_game')}
           </button>
-          <button className="btn btn-outline-danger btn-sm" onClick={() => { localStorage.clear(); window.location.reload(); }}>Resetuj zapis</button>
+          <button className="btn btn-outline-danger btn-sm" onClick={() => { localStorage.clear(); window.location.reload(); }}>{t('ui.reset')}</button>
           <div className="mt-4 border-top pt-3">
-            <button className="btn btn-sm btn-outline-secondary" onClick={toggleLang}>
-              🌐 {lang === 'pl' ? 'Switch to English' : 'Zmień na Polski'}
+            <button className="btn btn-sm btn-outline-secondary" onClick={cycleLang}>
+              🌐 {t('ui.lang_name')}
             </button>
           </div>
         </div>
@@ -214,9 +221,9 @@ function App() {
           <div className="card shadow-sm border-0">
             <div className="card-body">
               <ProgressButton 
-                label={<><Icons.Hammer size={20} className="me-2" />Wydobądź ręcznie (+${gameData.current.clickPower})</>} 
+                label={<><Icons.Hammer size={20} className="me-2" />{t('ui.click_label', { power: gameData.current.clickPower })}</>} 
                 duration={800} 
-                onFinish={() => { gameData.current.gold += gameData.current.clickPower; addLog("Złoto +"+gameData.current.clickPower); }} 
+                onFinish={() => { gameData.current.gold += gameData.current.clickPower; addLog(t('ui.gold_plus', { power: gameData.current.clickPower })); }} 
               />
               <hr />
               {Object.values(BUILDINGS).map(b => {
@@ -266,7 +273,7 @@ function App() {
                           onClick={() => handleBuyBuilding(b.id)}
                           style={{ fontSize: '0.8rem' }}
                         >
-                          Kup: {cost} 💰
+                          {t('ui.buy_cost', { cost })}
                         </button>
                       </div>
                     </div>
@@ -277,22 +284,22 @@ function App() {
             </div>
           </div>
         </div>
-        <div className="col-md-5"><Logger logs={logs} /></div>
+        <div className="col-md-5"><Logger logs={logs} t={t} /></div>
       </div>
     ),
     upgrades: () => (
       <div className="card shadow-sm p-4 mt-2 border-0">
-        <h5>Sklep z ulepszeniami</h5>
+        <h5>{t('upgrades_shop.title')}</h5>
         <div className="row mt-3">
           {Object.values(UPGRADES).map(upg => {
             if (gameData.current.upgrades[upg.id] || displayGold < upg.cost * 0.5) return null;
             return (
               <div key={upg.id} className="col-md-6 mb-3">
                 <div className="p-3 border rounded bg-light">
-                  <h6>{upg.name}</h6>
-                  <p className="small text-muted">{upg.description}</p>
+                  <h6>{t(`upgrades.${upg.id}.name`)}</h6>
+                  <p className="small text-muted">{t(`upgrades.${upg.id}.desc`)}</p>
                   <button className={`btn btn-sm w-100 ${displayGold >= upg.cost ? 'btn-warning' : 'btn-outline-secondary'}`}
-                          disabled={displayGold < upg.cost} onClick={() => handleBuyUpgrade(upg.id)}>Kup ({upg.cost})</button>
+                          disabled={displayGold < upg.cost} onClick={() => handleBuyUpgrade(upg.id)}>{t('ui.upgrade_buy_btn', { cost: upg.cost })}</button>
                 </div>
               </div>
             );
@@ -302,39 +309,39 @@ function App() {
     ),
     stats: () => (
       <div className="card shadow-sm p-4 text-center mt-2 border-0">
-        <h5>Statystyki Imperium</h5>
+        <h5>{t('stats.title')}</h5>
         <div className="row mt-4">
-          <div className="col-4 border-end"><h6>Złoto</h6><p className="h4 text-warning">{displayGold.toLocaleString()}</p></div>
-          <div className="col-4 border-end"><h6>Prędkość</h6><p className="h4 text-info">{displayGPS.toFixed(1)}/s</p></div>
-          <div className="col-4"><h6>Klik</h6><p className="h4 text-success">{gameData.current.clickPower}</p></div>
+          <div className="col-4 border-end"><h6>{t('stats.gold')}</h6><p className="h4 text-warning">{displayGold.toLocaleString()}</p></div>
+          <div className="col-4 border-end"><h6>{t('stats.speed')}</h6><p className="h4 text-info">{displayGPS.toFixed(1)}/s</p></div>
+          <div className="col-4"><h6>{t('stats.click')}</h6><p className="h4 text-success">{gameData.current.clickPower}</p></div>
         </div>
-        <button className="btn btn-secondary mt-4" onClick={() => setCurrentView('main')}>Powrót</button>
+        <button className="btn btn-secondary mt-4" onClick={() => setCurrentView('main')}>{t('stats.back')}</button>
       </div>
     ),
     prestige: () => {
       const gain = calculatePrestigeGain(gameData.current.gold);
       return (
         <div className="card shadow-sm p-4 text-center border-0 bg-dark text-white">
-          <h2 className="text-warning">Laboratorium Alchemii</h2>
-          <p>Punkty Prestiżu: <strong>{gameData.current.prestigePoints}</strong></p>
-          <p>Obecny bonus: <strong>+{(gameData.current.prestigePoints * 10)}%</strong></p>
+          <h2 className="text-warning">{t('prestige.title')}</h2>
+          <p>{t('prestige.points')}: <strong>{gameData.current.prestigePoints}</strong></p>
+          <p>{t('prestige.bonus')}: <strong>+{(gameData.current.prestigePoints * 10)}%</strong></p>
           <hr className="bg-secondary" />
           <div className="py-4">
-            <h5>Możliwy zysk: <span className="text-success">+{gain} pkt</span></h5>
-            <p className="small text-muted">(Wymagane min. 1M złota, aby zyskać punkty)</p>
+            <h5>{t('prestige.possible_gain')}: <span className="text-success">+{gain} {t('prestige.pts')}</span></h5>
+            <p className="small text-muted">{t('prestige.requirement')}</p>
             <button 
               className="btn btn-warning btn-lg mt-2" 
               disabled={gain <= 0}
               onClick={handlePrestige}
             >
-              Wykonaj Prestiż (Reset)
+              {t('prestige.execute')}
             </button>
           </div>
         </div>
       );
     },
     achievements: () => (
-      <AchievementsList achievementData={gameData.current.achievementData} />
+      <AchievementsList achievementData={gameData.current.achievementData} t={t} />
     )
 
   };
@@ -345,6 +352,7 @@ function App() {
       <AchievementNotification 
         notifications={notifications} 
         onRemove={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} 
+        t={t}
       />
       <nav className="navbar navbar-dark bg-dark rounded shadow-lg mb-4 px-3">
         <div className="d-flex align-items-center">
