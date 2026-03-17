@@ -1,5 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+/**
+ * A click-triggered progress button that animates a progress bar over a set duration
+ * before calling the `onFinish` callback. Prevents rapid re-clicking by disabling
+ * itself while the animation is running.
+ * Floating "+N" indicators are spawned at the click coordinates on each activation.
+ *
+ * @param {Object} props
+ * @param {React.ReactNode} props.label - Content rendered inside the button when idle
+ * @param {number} props.duration - Animation duration in milliseconds
+ * @param {Function} props.onFinish - Callback invoked once the progress bar completes
+ * @param {number|string} [props.clickValue] - Value shown in the floating indicator (e.g. click power)
+ */
 const ProgressButton = ({ label, duration, onFinish, clickValue }) => {
     const [progress, setProgress] = useState(0);
     const [active, setActive] = useState(false);
@@ -16,9 +28,9 @@ const ProgressButton = ({ label, duration, onFinish, clickValue }) => {
             setProgress(p);
             requestRef.current = requestAnimationFrame(animate);
         } else {
-            // KLUCZOWY FIX: Zerujemy wszystko przed zakończeniem
+            // Reset all animation state before invoking the callback
             cancelAnimationFrame(requestRef.current);
-            startTimeRef.current = null; // To sprawi, że następne kliknięcie zacznie od 0
+            startTimeRef.current = null; // Ensures the next click starts from 0
             
             setProgress(0);
             setActive(false);
@@ -29,12 +41,12 @@ const ProgressButton = ({ label, duration, onFinish, clickValue }) => {
     const handleLocalClick = (e) => {
         if (active) return;
 
-        // Resetujemy flagi przed startem
+        // Reset flags before starting the animation loop
         startTimeRef.current = null; 
         setProgress(0);
         setActive(true);
 
-        // Animacja cyferki
+        // Spawn a floating indicator at the click position
         const newClick = { id: Date.now(), x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
         setClicks(prev => [...prev, newClick]);
         setTimeout(() => setClicks(prev => prev.filter(c => c.id !== newClick.id)), 800);
@@ -45,9 +57,9 @@ const ProgressButton = ({ label, duration, onFinish, clickValue }) => {
     useEffect(() => () => cancelAnimationFrame(requestRef.current), []);
 
     return (
-        <div className="mb-3 position-relative"> {/* RELATIVE tutaj jest kluczowe */}
+        <div className="mb-3 position-relative"> {/* Relative positioning anchors the floating container */}
             
-            {/* Kontener na animacje - teraz absolutny, więc nic nie przesunie */}
+            {/* Absolute container for floating indicators — does not affect layout flow */}
             <div className="floating-container">
             {clicks.map(c => (
                 <span 
@@ -60,17 +72,17 @@ const ProgressButton = ({ label, duration, onFinish, clickValue }) => {
             ))}
             </div>
 
-            {/* PRZYCISK */}
+            {/* Button */}
             <button 
             className="btn btn-primary w-100 mb-2 py-2 fw-bold shadow-sm" 
             onClick={handleLocalClick} 
             disabled={active}
-            style={{ minHeight: '50px' }} // Stała wysokość zapobiega "skakaniu"
+            style={{ minHeight: '50px' }} // Fixed height prevents layout shift during state changes
             >
             {active ? 'Wydobywanie...' : label}
             </button>
 
-            {/* PASEK POSTĘPU */}
+            {/* Progress bar */}
             <div className="progress" style={{ height: '8px', background: '#e9ecef' }}>
             <div 
                 className="progress-bar progress-bar-striped progress-bar-animated bg-warning" 
