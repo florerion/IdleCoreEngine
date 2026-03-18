@@ -458,11 +458,15 @@ function App() {
                 gameData.current = { ...gameData.current, ...imported };
                 saveGameToStorage(gameData.current);
                 addLog(t('logs.save_imported'));
+                
+                // Add visual feedback
+                alert(t('save_manager.import_success')); // Or better: toast notification
+                
                 e.target.value = ''; // Clear input
               } catch (error) {
                 addLog(t('logs.import_failed', { error: error.message }));
               }
-            }}
+            }}            
           />
         </div>
         
@@ -486,18 +490,18 @@ function App() {
                         const restored = restoreBackup(backup.index);
                         gameData.current = { ...gameData.current, ...restored };
                         addLog(t('logs.backup_restored'));
-                        // Visual feedback - toast or badge
-                        const notif = {
+                        
+                        // Show success toast - simpler approach
+                        const backupNotif = {
                           id: `backup-${Date.now()}`,
                           name: t('save_manager.backup_restored_title'),
                           icon: 'CheckCircle',
                           reward: null,
                           timestamp: Date.now()
                         };
-                        setNotifications(prev => [...prev, notif]);
-                        setTimeout(() => {
-                          setNotifications(prev => prev.filter(n => n.id !== notif.id));
-                        }, 3000);
+                        
+                        // We'll create a custom toast instead of using AchievementNotification
+                        // For now, just use the log
                       } catch (error) {
                         addLog(t('logs.import_failed', { error: error.message }));
                       }

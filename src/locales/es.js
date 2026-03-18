@@ -86,6 +86,7 @@ export const es = {
     dev_mode_warning: '⚠️ MODO DESARROLLADOR ACTIVO - ¡Los guardados NO están encriptados!',
     no_backups: 'No hay copias de seguridad disponibles',
     confirm_restore: '¿Estás seguro de que quieres restaurar desde {{date}}? El estado actual del juego será reemplazado.',
-    backup_restored_title: '¡Copia de seguridad restaurada!'
+    backup_restored_title: '¡Copia de seguridad restaurada!',
+    import_success: '¡Guardado cargado exitosamente!',
   },
 };

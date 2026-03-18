@@ -3,11 +3,15 @@ import {
   loadSavePackage, 
   validateGameState 
 } from './encryption';
-import { MAX_BACKUPS } from '../config/devConfig';
+import { MAX_BACKUPS, AUTO_BACKUP_INTERVAL } from '../config/devConfig';
+
+// Track last backup time to respect AUTO_BACKUP_INTERVAL
+let lastBackupTime = 0;
 
 /**
  * Saves game state to localStorage
- * Encrypts if needed and creates auto-backup
+ * Encrypts if needed
+ * Backups are created based on AUTO_BACKUP_INTERVAL, not on every save
  * @param {Object} gameState - Current game state object
  * @throws {Error} If save operation fails
  * @example
@@ -18,8 +22,12 @@ export const saveGameToStorage = (gameState) => {
     const savePackage = createSavePackage(gameState);
     localStorage.setItem('idleGameSave', savePackage);
     
-    // Create timestamped backup
-    createAutoBackup(gameState);
+    // Create backup only if enough time has passed
+    const now = Date.now();
+    if (now - lastBackupTime >= AUTO_BACKUP_INTERVAL) {
+      createAutoBackup(gameState);
+      lastBackupTime = now;
+    }
   } catch (error) {
     console.error('Failed to save game:', error);
     throw error;
@@ -57,6 +65,7 @@ export const loadGameFromStorage = () => {
 /**
  * Creates a timestamped backup in localStorage
  * Automatically removes oldest backup if limit is exceeded
+ * This is called by saveGameToStorage based on AUTO_BACKUP_INTERVAL
  * @param {Object} gameState - Current game state
  * @throws {Error} If backup creation fails
  * @example
@@ -144,6 +153,7 @@ export const restoreBackup = (index) => {
 export const clearAllBackups = () => {
   try {
     localStorage.removeItem('idleGameBackups');
+    lastBackupTime = 0; // Reset backup timer
   } catch (error) {
     console.error('Failed to clear backups:', error);
   }

@@ -86,6 +86,7 @@ export const pl = {
     dev_mode_warning: '⚠️ DEV MODE AKTYWNY - Savey nie są zaszyfrowane!',
     no_backups: 'Brak dostępnych kopii zapasowych',
     confirm_restore: 'Czy naprawdę chcesz wgrać stan z {{date}}? Bieżący stan gry zostanie zastąpiony.',
-    backup_restored_title: 'Backup przywrócony!'
+    backup_restored_title: 'Backup przywrócony!',
+    import_success: 'Save został pomyślnie wgrany!',
   },
 };

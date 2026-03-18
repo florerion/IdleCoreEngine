@@ -86,6 +86,7 @@ export const en = {
     dev_mode_warning: '⚠️ DEV MODE ACTIVE - Saves are NOT encrypted!',
     no_backups: 'No backups available',
     confirm_restore: 'Are you sure you want to restore from {{date}}? Current game state will be replaced.',
-    backup_restored_title: 'Backup restored!'
+    backup_restored_title: 'Backup restored!',
+    import_success: 'Save loaded successfully!',
   },
 };
