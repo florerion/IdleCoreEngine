@@ -20,6 +20,7 @@ export const es = {
     upgrade_buy_btn: "Comprar ({{cost}})",
     lang_name: "Español",
     log_title: "Diario",
+    save_manager: 'Guardados',
   },
   logs: {
     system_active: "Sistemas activos...",
@@ -28,6 +29,11 @@ export const es = {
     prestige_low: "¡No hay suficiente oro para el prestigio!",
     era_started: "¡ERA {{n}} INICIADA!",
     prestige_multiplier: "Multiplicador de prestigio: x{{val}}",
+    save_imported: '¡Guardado importado exitosamente!',
+    import_failed: 'Error de importación: {{error}}',
+    backup_restored: '¡Copia de seguridad restaurada!',
+    save_corrupted: '¡Guardado está corrupto o modificado!',
+    export_ready: '¡Guardado listo para descargar!',
   },
   prestige: {
     title: "Laboratorio de Alquimia",
@@ -69,5 +75,17 @@ export const es = {
     miner: { name: "Minero", desc: "Produce 1/s" },
     drill: { name: "Taladro", desc: "Genera 5/s" },
     factory: { name: "Fábrica", desc: "Produce 25/s" },
-  }
+  },
+  save_manager: {
+    title: 'Gestión de Guardados',
+    export_section: 'Exportar Guardado',
+    import_section: 'Importar Guardado',
+    download_file: 'Descargar Archivo',
+    backups_section: 'Copias de Seguridad',
+    restore_button: 'Restaurar',
+    dev_mode_warning: '⚠️ MODO DESARROLLADOR ACTIVO - ¡Los guardados NO están encriptados!',
+    no_backups: 'No hay copias de seguridad disponibles',
+    confirm_restore: '¿Estás seguro de que quieres restaurar desde {{date}}? El estado actual del juego será reemplazado.',
+    backup_restored_title: '¡Copia de seguridad restaurada!'
+  },
 };

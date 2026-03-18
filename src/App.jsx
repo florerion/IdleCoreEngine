@@ -15,6 +15,17 @@ import { checkAchievements, applyAchievementReward } from './logic/gameLogic';
 import AchievementsList from './components/AchievementsList';
 import AchievementNotification from "./components/AchievementNotification";
 import { ACHIEVEMENTS } from "./data/achievements";
+import { DEV_MODE } from './config/devConfig';
+import { 
+  saveGameToStorage, 
+  loadGameFromStorage, 
+  listBackups, 
+  restoreBackup 
+} from './utils/saveManager';
+import { 
+  downloadSaveFile, 
+  importSaveFile 
+} from './utils/fileHandler';
 
 const TRANSLATIONS = { pl, en, es };
 const LANGS = ['pl', 'en', 'es'];
@@ -78,29 +89,29 @@ function App() {
     }, 5000);
   };
 
-  // --- TICK, OFFLINE PROGRESS, AND AUTO-SAVE ---
+  // --- GAME TICK, OFFLINE & SAVE LOGIC ---
   useEffect(() => {
-    const saved = localStorage.getItem('idleGameSave');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
+    // Load game state on mount
+    try {
+      const saved = loadGameFromStorage();
+      if (saved) {
         const now = Date.now();
-        const secondsAway = Math.floor((now - (parsed.lastUpdate || now)) / 1000);
+        const secondsAway = Math.floor((now - (saved.lastUpdate || now)) / 1000);
 
+        // Merge loaded state with fresh data structures
         const freshOwned = getInitialOwned();
         const freshUpgrades = getInitialUpgrades();
         const freshAchievements = getInitialAchievementData();
         
-        // Merge saved data on top of fresh defaults to handle newly added buildings/upgrades
         gameData.current = {
-          ...gameData.current,
-          ...parsed,
-          owned: { ...freshOwned, ...parsed.owned },
-          upgrades: { ...freshUpgrades, ...parsed.upgrades },
-          achievementData: { ...freshAchievements, ...parsed.achievementData },
+          ...saved,
+          owned: { ...freshOwned, ...saved.owned },
+          upgrades: { ...freshUpgrades, ...saved.upgrades },
+          achievementData: { ...freshAchievements, ...saved.achievementData },
           lastUpdate: now
         };
 
+        // Handle offline earnings
         if (secondsAway > 10) {
           const gps = calculateCurrentGPS(gameData.current);
           const earned = Math.floor(gps * secondsAway);
@@ -109,9 +120,14 @@ function App() {
             addLog(t('ui.offline_msg', { time: Math.floor(secondsAway / 60), earned: earned.toLocaleString() }));
           }
         }
-      } catch (e) { console.error("Błąd wczytywania", e); }
+      }
+    } catch (error) {
+      console.error('Failed to load save:', error);
+      addLog(t('logs.save_corrupted'));
+      // Continue with fresh game state
     }
 
+    // Main game tick - update every 50ms
     const interval = setInterval(() => {
       const now = Date.now();
       const dt = (now - gameData.current.lastUpdate) / 1000;
@@ -125,7 +141,7 @@ function App() {
       setDisplayGPS(gps);
     }, 50);
 
-    // Separate interval for achievement checks to avoid running every 50ms tick
+    // Achievement check interval - every 1000ms
     const achievementCheckInterval = setInterval(() => {
       const newAchievements = checkAchievements(gameData.current);
       newAchievements.forEach(achId => {
@@ -134,14 +150,20 @@ function App() {
       });
     }, 1000);
 
+    // Auto-save to localStorage - every 5000ms
     const saveInt = setInterval(() => {
-      localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
+      try {
+        saveGameToStorage(gameData.current);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+      }
     }, 5000);
 
     return () => { 
       clearInterval(interval); 
       clearInterval(achievementCheckInterval);
-      clearInterval(saveInt); };
+      clearInterval(saveInt);
+    };
   }, []);
 
   // --- PURCHASE ACTIONS ---
@@ -392,7 +414,105 @@ function App() {
     },
     achievements: () => (
       <AchievementsList achievementData={gameData.current.achievementData} t={t} />
-    )
+    ),
+    saveManager: () => (
+      <div className="card shadow-sm p-4 mt-2 border-0">
+        <h5>{t('save_manager.title')}</h5>
+        
+        {DEV_MODE && (
+          <div className="alert alert-warning mb-4">
+            {t('save_manager.dev_mode_warning')}
+          </div>
+        )}
+        
+        {/* EXPORT SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.export_section')}</h6>
+          <button 
+            className="btn btn-primary w-100"
+            onClick={() => {
+              try {
+                downloadSaveFile(gameData.current);
+                addLog(t('logs.export_ready'));
+              } catch (error) {
+                addLog(t('logs.import_failed', { error: error.message }));
+              }
+            }}
+          >
+            📥 {t('save_manager.download_file')}
+          </button>
+        </div>
+        
+        {/* IMPORT SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.import_section')}</h6>
+          <input 
+            type="file" 
+            className="form-control"
+            accept=".dat,.json"
+            onChange={async (e) => {
+              if (!e.target.files[0]) return;
+              
+              try {
+                const imported = await importSaveFile(e.target.files[0]);
+                gameData.current = { ...gameData.current, ...imported };
+                saveGameToStorage(gameData.current);
+                addLog(t('logs.save_imported'));
+                e.target.value = ''; // Clear input
+              } catch (error) {
+                addLog(t('logs.import_failed', { error: error.message }));
+              }
+            }}
+          />
+        </div>
+        
+        {/* BACKUPS SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.backups_section')}</h6>
+          <div className="d-flex flex-wrap gap-2">
+            {listBackups().length === 0 ? (
+              <p className="text-muted small">{t('save_manager.no_backups')}</p>
+            ) : (
+              listBackups().map((backup) => (
+                <button 
+                  key={backup.index}
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => {
+                    // Ask for confirmation before restoring
+                    const confirmMsg = t('save_manager.confirm_restore', { date: backup.dateStr });
+                    
+                    if (window.confirm(confirmMsg)) {
+                      try {
+                        const restored = restoreBackup(backup.index);
+                        gameData.current = { ...gameData.current, ...restored };
+                        addLog(t('logs.backup_restored'));
+                        // Visual feedback - toast or badge
+                        const notif = {
+                          id: `backup-${Date.now()}`,
+                          name: t('save_manager.backup_restored_title'),
+                          icon: 'CheckCircle',
+                          reward: null,
+                          timestamp: Date.now()
+                        };
+                        setNotifications(prev => [...prev, notif]);
+                        setTimeout(() => {
+                          setNotifications(prev => prev.filter(n => n.id !== notif.id));
+                        }, 3000);
+                      } catch (error) {
+                        addLog(t('logs.import_failed', { error: error.message }));
+                      }
+                    }
+                  }}
+                >
+                  {backup.dateStr}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+    ),
 
   };
 
@@ -428,6 +548,9 @@ function App() {
           </button>
           <button className={`btn btn-sm ${currentView==='stats'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('stats')}>
             <Icons.BarChart3 size={16} className="me-1" /> {t('ui.stats')}
+          </button>
+          <button className={`btn btn-sm ${currentView==='saveManager'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('saveManager')}>
+            <Icons.Save size={16} className="me-1" /> {t('ui.save_manager')}
           </button>
           <button className="btn btn-sm btn-secondary ms-2" onClick={() => setCurrentView('menu')}>{t('ui.menu')}</button>
         </div>

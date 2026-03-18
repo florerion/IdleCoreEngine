@@ -20,6 +20,7 @@ export const pl = {
     upgrade_buy_btn: "Kup ({{cost}})",
     lang_name: "Polski",
     log_title: "Dziennik",
+    save_manager: 'Saves',
   },
   logs: {
     system_active: "Systemy aktywne...",
@@ -28,6 +29,11 @@ export const pl = {
     prestige_low: "Za mało złota na wykonanie prestiżu!",
     era_started: "ERA {{n}} ROZPOCZĘTA!",
     prestige_multiplier: "Mnożnik prestiżu: x{{val}}",
+    save_imported: 'Save został pomyślnie importowany!',
+    import_failed: 'Błąd importu: {{error}}',
+    backup_restored: 'Kopia zapasowa została przywrócona!',
+    save_corrupted: 'Save jest uszkodzony lub zmieniony!',
+    export_ready: 'Save gotowy do pobrania!',
   },
   prestige: {
     title: "Laboratorium Alchemii",
@@ -69,5 +75,17 @@ export const pl = {
     miner: { name: "Górnik", desc: "Wydobywa 1/s" },
     drill: { name: "Wiertło", desc: "Generuje 5/s" },
     factory: { name: "Fabryka", desc: "Produkcja 25/s" },
-  }
+  },
+  save_manager: {
+    title: 'Zarządzanie Saves',
+    export_section: 'Eksportuj Save',
+    import_section: 'Importuj Save',
+    download_file: 'Pobierz Plik',
+    backups_section: 'Kopie Zapasowe',
+    restore_button: 'Przywróć',
+    dev_mode_warning: '⚠️ DEV MODE AKTYWNY - Savey nie są zaszyfrowane!',
+    no_backups: 'Brak dostępnych kopii zapasowych',
+    confirm_restore: 'Czy naprawdę chcesz wgrać stan z {{date}}? Bieżący stan gry zostanie zastąpiony.',
+    backup_restored_title: 'Backup przywrócony!'
+  },
 };
