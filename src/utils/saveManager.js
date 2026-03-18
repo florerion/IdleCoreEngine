@@ -124,7 +124,7 @@ export const listBackups = () => {
  * @returns {Object} Restored game state
  * @throws {Error} If backup not found or restoration fails
  * @example
- * const gameState = restoreBackup(0); // Restore newest backup
+ * const gameState = restoreBackup(0); // Restore first (oldest) backup
  */
 export const restoreBackup = (index) => {
   try {
