@@ -217,9 +217,9 @@ function App() {
    * 3. On confirmation: resets all progress to a fresh game state while carrying
    *    over accumulated prestige points and applying the prestige multiplier
    *    (each prestige point grants +10% to all production).
-   * 4. Immediately persists the new state to localStorage.
+   * 4. Immediately persists the new state using the centralized save system.
    */
-  const handlePrestige = () => {
+  const handlePrestige = async () => {
     const gain = calculatePrestigeGain(gameData.current.gold);
     
     // Validate that a prestige reset would actually yield points
@@ -231,30 +231,36 @@ function App() {
     // Show a confirmation dialog with the potential gain and resulting bonus
     const confirmMsg = t('prestige.confirm', { gain, percent: gain * 10 });
 
-    if (window.confirm(confirmMsg)) {
-      const totalPoints = (gameData.current.prestigePoints || 0) + gain;
-      
-      // Build a clean new game state, then overlay prestige-persistent values
-      const newState = getNewGameState(); 
-      
-      gameData.current = {
-        ...newState,
-        prestigePoints: totalPoints,
-        prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
-        lastUpdate: Date.now()
-      };
+    const confirmed = await showConfirm({
+      message: confirmMsg,
+    });
 
-      // Reset the log and notify the player about the new era
-      setLogs([
-        t('logs.era_started', { n: totalPoints }),
-        t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
-        ...logs
-      ].slice(0, 5));
-      setCurrentView('main');
-      
-      // Persist immediately so progress is not lost on a page reload
-      localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
+    if (!confirmed) {
+      return;
     }
+
+    const totalPoints = (gameData.current.prestigePoints || 0) + gain;
+    
+    // Build a clean new game state, then overlay prestige-persistent values
+    const newState = getNewGameState(); 
+    
+    gameData.current = {
+      ...newState,
+      prestigePoints: totalPoints,
+      prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
+      lastUpdate: Date.now()
+    };
+
+    // Reset the log and notify the player about the new era
+    setLogs([
+      t('logs.era_started', { n: totalPoints }),
+      t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
+      ...logs
+    ].slice(0, 5));
+    setCurrentView('main');
+    
+    // Persist immediately so progress is not lost on a page reload
+    saveGameToStorage(gameData.current);
   };
 
   // Helper to show confirmation modal (replaces window.confirm)
@@ -266,14 +272,14 @@ function App() {
           ...config,
           onConfirm: () => {
             resolve(true);
+            setConfirmModal({ show: false, config: {} });
+          },
+          onCancel: () => {
+            resolve(false);
+            setConfirmModal({ show: false, config: {} });
           }
         }
       });
-      
-      // Cancel handler
-      const originalOnCancel = setConfirmModal;
-      originalOnCancel({ show: false, config: {} });
-      resolve(false);
     });
   };
 
