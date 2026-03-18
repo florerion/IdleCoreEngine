@@ -87,6 +87,23 @@ export const loadSavePackage = (saveString) => {
   } catch (error) {
     throw new Error(`Invalid save format: ${error.message}`);
   }
+
+  const isObject = pkg !== null && typeof pkg === 'object';
+  const hasPackageShape =
+    isObject && ('data' in pkg || 'version' in pkg || 'devMode' in pkg);
+
+  // Handle legacy saves that were stored as raw game state JSON
+  // (no packaging metadata like version/devMode/data)
+  if (!hasPackageShape) {
+    const legacyState = pkg;
+    // Treat legacy saves as coming from version 0
+    return migrateGameState(legacyState, 0);
+  }
+  
+  // At this point we expect a packaged save object
+  if (!('data' in pkg)) {
+    throw new Error('Invalid save package: missing data field.');
+  }
   
   // Validate DEV_MODE compatibility
   if (pkg.devMode && !DEV_MODE) {
@@ -110,7 +127,10 @@ export const loadSavePackage = (saveString) => {
     // Plain JSON in DEV_MODE
     gameState = pkg.data;
   } else {
-    // Encrypted data - try to decrypt
+    // Encrypted data - validate and try to decrypt
+    if (typeof pkg.data !== 'string') {
+      throw new Error('Invalid save package: expected encrypted data to be a string.');
+    }
     try {
       gameState = decryptSave(pkg.data);
     } catch (error) {
@@ -119,7 +139,8 @@ export const loadSavePackage = (saveString) => {
   }
   
   // Migrate game state if format version changed
-  gameState = migrateGameState(gameState, pkg.version);
+  const fromVersion = typeof pkg.version === 'number' ? pkg.version : 0;
+  gameState = migrateGameState(gameState, fromVersion);
   
   return gameState;
 };
