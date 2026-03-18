@@ -21,6 +21,7 @@ export const pl = {
     lang_name: "Polski",
     log_title: "Dziennik",
     save_manager: 'Saves',
+    cancel: 'Anuluj',
   },
   logs: {
     system_active: "Systemy aktywne...",
@@ -88,5 +89,10 @@ export const pl = {
     confirm_restore: 'Czy naprawdę chcesz wgrać stan z {{date}}? Bieżący stan gry zostanie zastąpiony.',
     backup_restored_title: 'Backup przywrócony!',
     import_success: 'Save został pomyślnie wgrany!',
+    confirm_restore_title: 'Przywrócić backup?',
+    backup_restored_message: 'Stan gry z {{date}} został wgrany.',
+    restore_failed: 'Błąd przywracania',
+    import_success_title: 'Save wgrany!',
+    import_failed_title: 'Błąd importu',    
   },
 };

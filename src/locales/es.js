@@ -21,6 +21,7 @@ export const es = {
     lang_name: "Español",
     log_title: "Diario",
     save_manager: 'Guardados',
+    cancel: 'Cancelar',
   },
   logs: {
     system_active: "Sistemas activos...",
@@ -88,5 +89,10 @@ export const es = {
     confirm_restore: '¿Estás seguro de que quieres restaurar desde {{date}}? El estado actual del juego será reemplazado.',
     backup_restored_title: '¡Copia de seguridad restaurada!',
     import_success: '¡Guardado cargado exitosamente!',
+    confirm_restore_title: '¿Restaurar Copia de Seguridad?',
+    backup_restored_message: 'Estado del juego desde {{date}} ha sido cargado.',
+    restore_failed: 'Error al Restaurar',
+    import_success_title: '¡Guardado Cargado!',
+    import_failed_title: 'Error de Importación',
   },
 };

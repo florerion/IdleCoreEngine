@@ -21,6 +21,7 @@ export const en = {
     lang_name: "English",
     log_title: "Journal",
     save_manager: 'Saves',
+    cancel: 'Cancel',
   },
   logs: {
     system_active: "Systems active...",
@@ -88,5 +89,10 @@ export const en = {
     confirm_restore: 'Are you sure you want to restore from {{date}}? Current game state will be replaced.',
     backup_restored_title: 'Backup restored!',
     import_success: 'Save loaded successfully!',
+    confirm_restore_title: 'Restore Backup?',
+    backup_restored_message: 'Game state from {{date}} has been loaded.',
+    restore_failed: 'Restore Failed',
+    import_success_title: 'Save Loaded!',
+    import_failed_title: 'Import Failed',
   },
 };

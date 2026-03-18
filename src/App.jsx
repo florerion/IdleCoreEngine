@@ -13,7 +13,6 @@ import { en } from './locales/en';
 import { es } from './locales/es';
 import { checkAchievements, applyAchievementReward } from './logic/gameLogic';
 import AchievementsList from './components/AchievementsList';
-import AchievementNotification from "./components/AchievementNotification";
 import { ACHIEVEMENTS } from "./data/achievements";
 import { DEV_MODE } from './config/devConfig';
 import { 
@@ -26,6 +25,9 @@ import {
   downloadSaveFile, 
   importSaveFile 
 } from './utils/fileHandler';
+import ToastContainer from './components/ToastContainer';
+import ConfirmModal from './components/ConfirmModal';
+import { useToast } from './hooks/useToast';
 
 const TRANSLATIONS = { pl, en, es };
 const LANGS = ['pl', 'en', 'es'];
@@ -36,7 +38,9 @@ function App() {
   const [displayGold, setDisplayGold] = useState(0);
   const [displayGPS, setDisplayGPS] = useState(0);
   const [lang, setLang] = useState('pl');
-  const [notifications, setNotifications] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({ show: false, config: {} });
+  
+  const { showToast } = useToast();
 
   /**
    * Resolves a dot-separated translation key to a string in the active language,
@@ -65,28 +69,20 @@ function App() {
   const addLog = (m) => setLogs(p => [m, ...p].slice(0, 5));
 
   /**
-   * Displays a toast notification for a newly unlocked achievement.
-   * The notification is automatically removed after 5 seconds.
-   *
-   * @param {string} achievementId - ID of the achievement that was unlocked
-   * @example
-   * showAchievementNotification('firstGold');
+   * Displays achievement notification using toast system
+   * @param {string} achievementId - ID of unlocked achievement
    */
   const showAchievementNotification = (achievementId) => {
     const ach = ACHIEVEMENTS[achievementId];
-    const newNotif = {
-      id: achievementId,
-      name: ach.name,
-      icon: ach.icon,
-      reward: ach.reward,
-      timestamp: Date.now()
-    };
-    setNotifications(prev => [...prev, newNotif]);
     
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== achievementId));
-    }, 5000);
+    showToast({
+      type: 'achievement',
+      title: t(`achievements.${achievementId}.name`),
+      message: t(`achievements.${achievementId}.desc`),
+      position: 'top-right',
+      duration: 4000,
+      addToLog: true
+    });
   };
 
   // --- GAME TICK, OFFLINE & SAVE LOGIC ---
@@ -259,6 +255,34 @@ function App() {
       // Persist immediately so progress is not lost on a page reload
       localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
     }
+  };
+
+  // Helper to show confirmation modal (replaces window.confirm)
+  const showConfirm = (config) => {
+    return new Promise((resolve) => {
+      setConfirmModal({
+        show: true,
+        config: {
+          ...config,
+          onConfirm: () => {
+            resolve(true);
+          }
+        }
+      });
+      
+      // Cancel handler
+      const originalOnCancel = setConfirmModal;
+      originalOnCancel({ show: false, config: {} });
+      resolve(false);
+    });
+  };
+
+  // Simpler version (non-promise):
+  const confirmAction = (config) => {
+    setConfirmModal({
+      show: true,
+      config
+    });
   };
 
   // --- VIEW DEFINITIONS ---
@@ -457,16 +481,28 @@ function App() {
                 const imported = await importSaveFile(e.target.files[0]);
                 gameData.current = { ...gameData.current, ...imported };
                 saveGameToStorage(gameData.current);
-                addLog(t('logs.save_imported'));
                 
-                // Add visual feedback
-                alert(t('save_manager.import_success')); // Or better: toast notification
+                showToast({
+                  type: 'success',
+                  title: t('save_manager.import_success_title'),
+                  message: t('save_manager.import_success'),
+                  position: 'top-right',
+                  duration: 4000,
+                  addToLog: true
+                });
                 
-                e.target.value = ''; // Clear input
+                e.target.value = '';
               } catch (error) {
-                addLog(t('logs.import_failed', { error: error.message }));
+                showToast({
+                  type: 'error',
+                  title: t('save_manager.import_failed_title'),
+                  message: error.message,
+                  position: 'top-right',
+                  duration: 5000,
+                  addToLog: true
+                });
               }
-            }}            
+            }}           
           />
         </div>
         
@@ -482,30 +518,41 @@ function App() {
                   key={backup.index}
                   className="btn btn-outline-secondary btn-sm"
                   onClick={() => {
-                    // Ask for confirmation before restoring
-                    const confirmMsg = t('save_manager.confirm_restore', { date: backup.dateStr });
-                    
-                    if (window.confirm(confirmMsg)) {
-                      try {
-                        const restored = restoreBackup(backup.index);
-                        gameData.current = { ...gameData.current, ...restored };
-                        addLog(t('logs.backup_restored'));
-                        
-                        // Show success toast - simpler approach
-                        const backupNotif = {
-                          id: `backup-${Date.now()}`,
-                          name: t('save_manager.backup_restored_title'),
-                          icon: 'CheckCircle',
-                          reward: null,
-                          timestamp: Date.now()
-                        };
-                        
-                        // We'll create a custom toast instead of using AchievementNotification
-                        // For now, just use the log
-                      } catch (error) {
-                        addLog(t('logs.import_failed', { error: error.message }));
+                    confirmAction({
+                      title: t('save_manager.confirm_restore_title'),
+                      message: t('save_manager.confirm_restore', { date: backup.dateStr }),
+                      type: 'warning',
+                      confirmText: t('save_manager.restore_button'),
+                      cancelText: t('ui.cancel'),
+                      onConfirm: () => {
+                        try {
+                          const restored = restoreBackup(backup.index);
+                          gameData.current = { ...gameData.current, ...restored };
+                          saveGameToStorage(gameData.current);
+                          
+                          // Show success toast
+                          showToast({
+                            type: 'success',
+                            title: t('save_manager.backup_restored_title'),
+                            message: t('save_manager.backup_restored_message', { date: backup.dateStr }),
+                            position: 'top-right',
+                            duration: 4000,
+                            addToLog: true
+                          });
+                          
+                          addLog(t('logs.backup_restored'));
+                        } catch (error) {
+                          showToast({
+                            type: 'error',
+                            title: t('save_manager.restore_failed'),
+                            message: error.message,
+                            position: 'top-right',
+                            duration: 5000,
+                            addToLog: true
+                          });
+                        }
                       }
-                    }
+                    });
                   }}
                 >
                   {backup.dateStr}
@@ -522,11 +569,17 @@ function App() {
 
   return (
     <div className="container py-4">
-      {/* Notyfikacja na górze */}
-      <AchievementNotification 
-        notifications={notifications} 
-        onRemove={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} 
-        t={t}
+      <ToastContainer /> 
+      
+      <ConfirmModal 
+        show={confirmModal.show}
+        title={confirmModal.config.title}
+        message={confirmModal.config.message}
+        type={confirmModal.config.type || 'info'}
+        confirmText={confirmModal.config.confirmText || 'Confirm'}
+        cancelText={confirmModal.config.cancelText || 'Cancel'}
+        onConfirm={() => confirmModal.config.onConfirm?.()}
+        onCancel={() => setConfirmModal({ show: false, config: {} })}
       />
       <nav className="navbar navbar-dark bg-dark rounded shadow-lg mb-4 px-3">
         <div className="d-flex align-items-center">
