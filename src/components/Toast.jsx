@@ -71,7 +71,7 @@ const Toast = ({ toast }) => {
       aria-live="polite"
     >
       <div className={`toast-box border ${config.bgClass} ${config.borderClass} ${config.textClass}`}>
-        <div className="d-flex align-items-flex-start">
+        <div className="d-flex align-items-start">
           {/* Icon */}
           <IconComponent size={24} className="me-3 flex-shrink-0 mt-1" />
 
