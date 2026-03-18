@@ -34,18 +34,47 @@ export const encryptSave = (data, seed = ENCRYPTION_SEED) => {
  * // Returns: { gold: 1000, gps: 5, ... }
  */
 export const decryptSave = (encrypted, seed = ENCRYPTION_SEED) => {
-  try {
-    const decrypted = CryptoJS.AES.decrypt(encrypted, seed);
+  /**
+   * Try to decrypt with a specific seed and return parsed JSON.
+   * Throws if decryption fails or produces an empty result.
+   */
+  const tryDecryptWithSeed = (enc, currentSeed) => {
+    const decrypted = CryptoJS.AES.decrypt(enc, currentSeed);
     const jsonString = decrypted.toString(CryptoJS.enc.Utf8);
-    
+
     if (!jsonString) {
       throw new Error('Decryption produced empty result - possible tampering or wrong seed');
     }
-    
+
     return JSON.parse(jsonString);
+  };
+
+  let lastError;
+
+  // First, try with the provided/current seed
+  try {
+    return tryDecryptWithSeed(encrypted, seed);
   } catch (error) {
-    throw new Error(`Decryption failed: ${error.message}`);
+    lastError = error;
   }
+
+  // If that fails, attempt to decrypt with each legacy seed
+  const seedsToTry = Array.isArray(LEGACY_SEEDS) ? LEGACY_SEEDS : [];
+  for (const legacySeed of seedsToTry) {
+    // Skip if the legacy seed is the same as the primary seed we already tried
+    if (legacySeed === seed) continue;
+
+    try {
+      return tryDecryptWithSeed(encrypted, legacySeed);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  // If all seeds fail, surface a final error
+  throw new Error(
+    `Decryption failed: ${lastError && lastError.message ? lastError.message : 'All seeds failed'}`
+  );
 };
 
 /**
