@@ -32,6 +32,35 @@ import { useToast } from './hooks/useToast';
 const TRANSLATIONS = { pl, en, es };
 const LANGS = ['pl', 'en', 'es'];
 
+// Merge a saved/restored game state into a fresh default state, ensuring
+// nested maps like owned, upgrades, and achievementData retain new keys.
+const mergeWithDefaults = (savedState) => {
+  const defaults = getNewGameState();
+
+  const mergedOwned = {
+    ...(defaults.owned || {}),
+    ...((savedState && savedState.owned) || {}),
+  };
+
+  const mergedUpgrades = {
+    ...(defaults.upgrades || {}),
+    ...((savedState && savedState.upgrades) || {}),
+  };
+
+  const mergedAchievementData = {
+    ...(defaults.achievementData || {}),
+    ...((savedState && savedState.achievementData) || {}),
+  };
+
+  return {
+    ...defaults,
+    ...(savedState || {}),
+    owned: mergedOwned,
+    upgrades: mergedUpgrades,
+    achievementData: mergedAchievementData,
+  };
+};
+
 function App() {
   const [currentView, setCurrentView] = useState('menu');
   const [logs, setLogs] = useState([pl.logs.system_active]);
@@ -533,7 +562,8 @@ function App() {
                       onConfirm: () => {
                         try {
                           const restored = restoreBackup(backup.index);
-                          gameData.current = { ...gameData.current, ...restored };
+                          const mergedState = mergeWithDefaults(restored);
+                          gameData.current = mergedState;
                           saveGameToStorage(gameData.current);
                           
                           // Show success toast
