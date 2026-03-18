@@ -13,11 +13,53 @@ import { en } from './locales/en';
 import { es } from './locales/es';
 import { checkAchievements, applyAchievementReward } from './logic/gameLogic';
 import AchievementsList from './components/AchievementsList';
-import AchievementNotification from "./components/AchievementNotification";
 import { ACHIEVEMENTS } from "./data/achievements";
+import { DEV_MODE } from './config/devConfig';
+import { 
+  saveGameToStorage, 
+  loadGameFromStorage, 
+  listBackups, 
+  restoreBackup 
+} from './utils/saveManager';
+import { 
+  downloadSaveFile, 
+  importSaveFile 
+} from './utils/fileHandler';
+import ToastContainer from './components/ToastContainer';
+import ConfirmModal from './components/ConfirmModal';
+import { useToast } from './hooks/useToast';
 
 const TRANSLATIONS = { pl, en, es };
 const LANGS = ['pl', 'en', 'es'];
+
+// Merge a saved/restored game state into a fresh default state, ensuring
+// nested maps like owned, upgrades, and achievementData retain new keys.
+const mergeWithDefaults = (savedState) => {
+  const defaults = getNewGameState();
+
+  const mergedOwned = {
+    ...(defaults.owned || {}),
+    ...((savedState && savedState.owned) || {}),
+  };
+
+  const mergedUpgrades = {
+    ...(defaults.upgrades || {}),
+    ...((savedState && savedState.upgrades) || {}),
+  };
+
+  const mergedAchievementData = {
+    ...(defaults.achievementData || {}),
+    ...((savedState && savedState.achievementData) || {}),
+  };
+
+  return {
+    ...defaults,
+    ...(savedState || {}),
+    owned: mergedOwned,
+    upgrades: mergedUpgrades,
+    achievementData: mergedAchievementData,
+  };
+};
 
 function App() {
   const [currentView, setCurrentView] = useState('menu');
@@ -25,7 +67,9 @@ function App() {
   const [displayGold, setDisplayGold] = useState(0);
   const [displayGPS, setDisplayGPS] = useState(0);
   const [lang, setLang] = useState('pl');
-  const [notifications, setNotifications] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({ show: false, config: {} });
+  
+  const { showToast } = useToast();
 
   /**
    * Resolves a dot-separated translation key to a string in the active language,
@@ -54,53 +98,45 @@ function App() {
   const addLog = (m) => setLogs(p => [m, ...p].slice(0, 5));
 
   /**
-   * Displays a toast notification for a newly unlocked achievement.
-   * The notification is automatically removed after 5 seconds.
-   *
-   * @param {string} achievementId - ID of the achievement that was unlocked
-   * @example
-   * showAchievementNotification('firstGold');
+   * Displays achievement notification using toast system
+   * @param {string} achievementId - ID of unlocked achievement
    */
   const showAchievementNotification = (achievementId) => {
     const ach = ACHIEVEMENTS[achievementId];
-    const newNotif = {
-      id: achievementId,
-      name: ach.name,
-      icon: ach.icon,
-      reward: ach.reward,
-      timestamp: Date.now()
-    };
-    setNotifications(prev => [...prev, newNotif]);
     
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== achievementId));
-    }, 5000);
+    showToast({
+      type: 'achievement',
+      title: t(`achievements.${achievementId}.name`),
+      message: t(`achievements.${achievementId}.desc`),
+      position: 'top-right',
+      duration: 4000,
+      addToLog: true
+    });
   };
 
-  // --- TICK, OFFLINE PROGRESS, AND AUTO-SAVE ---
+  // --- GAME TICK, OFFLINE & SAVE LOGIC ---
   useEffect(() => {
-    const saved = localStorage.getItem('idleGameSave');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
+    // Load game state on mount
+    try {
+      const saved = loadGameFromStorage();
+      if (saved) {
         const now = Date.now();
-        const secondsAway = Math.floor((now - (parsed.lastUpdate || now)) / 1000);
+        const secondsAway = Math.floor((now - (saved.lastUpdate || now)) / 1000);
 
+        // Merge loaded state with fresh data structures
         const freshOwned = getInitialOwned();
         const freshUpgrades = getInitialUpgrades();
         const freshAchievements = getInitialAchievementData();
         
-        // Merge saved data on top of fresh defaults to handle newly added buildings/upgrades
         gameData.current = {
-          ...gameData.current,
-          ...parsed,
-          owned: { ...freshOwned, ...parsed.owned },
-          upgrades: { ...freshUpgrades, ...parsed.upgrades },
-          achievementData: { ...freshAchievements, ...parsed.achievementData },
+          ...saved,
+          owned: { ...freshOwned, ...saved.owned },
+          upgrades: { ...freshUpgrades, ...saved.upgrades },
+          achievementData: { ...freshAchievements, ...saved.achievementData },
           lastUpdate: now
         };
 
+        // Handle offline earnings
         if (secondsAway > 10) {
           const gps = calculateCurrentGPS(gameData.current);
           const earned = Math.floor(gps * secondsAway);
@@ -109,9 +145,14 @@ function App() {
             addLog(t('ui.offline_msg', { time: Math.floor(secondsAway / 60), earned: earned.toLocaleString() }));
           }
         }
-      } catch (e) { console.error("Błąd wczytywania", e); }
+      }
+    } catch (error) {
+      console.error('Failed to load save:', error);
+      addLog(t('logs.save_corrupted'));
+      // Continue with fresh game state
     }
 
+    // Main game tick - update every 50ms
     const interval = setInterval(() => {
       const now = Date.now();
       const dt = (now - gameData.current.lastUpdate) / 1000;
@@ -125,7 +166,7 @@ function App() {
       setDisplayGPS(gps);
     }, 50);
 
-    // Separate interval for achievement checks to avoid running every 50ms tick
+    // Achievement check interval - every 1000ms
     const achievementCheckInterval = setInterval(() => {
       const newAchievements = checkAchievements(gameData.current);
       newAchievements.forEach(achId => {
@@ -134,14 +175,20 @@ function App() {
       });
     }, 1000);
 
+    // Auto-save to localStorage - every 5000ms
     const saveInt = setInterval(() => {
-      localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
+      try {
+        saveGameToStorage(gameData.current);
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+      }
     }, 5000);
 
     return () => { 
       clearInterval(interval); 
       clearInterval(achievementCheckInterval);
-      clearInterval(saveInt); };
+      clearInterval(saveInt);
+    };
   }, []);
 
   // --- PURCHASE ACTIONS ---
@@ -199,9 +246,9 @@ function App() {
    * 3. On confirmation: resets all progress to a fresh game state while carrying
    *    over accumulated prestige points and applying the prestige multiplier
    *    (each prestige point grants +10% to all production).
-   * 4. Immediately persists the new state to localStorage.
+   * 4. Immediately persists the new state using the centralized save system.
    */
-  const handlePrestige = () => {
+  const handlePrestige = async () => {
     const gain = calculatePrestigeGain(gameData.current.gold);
     
     // Validate that a prestige reset would actually yield points
@@ -213,30 +260,64 @@ function App() {
     // Show a confirmation dialog with the potential gain and resulting bonus
     const confirmMsg = t('prestige.confirm', { gain, percent: gain * 10 });
 
-    if (window.confirm(confirmMsg)) {
-      const totalPoints = (gameData.current.prestigePoints || 0) + gain;
-      
-      // Build a clean new game state, then overlay prestige-persistent values
-      const newState = getNewGameState(); 
-      
-      gameData.current = {
-        ...newState,
-        prestigePoints: totalPoints,
-        prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
-        lastUpdate: Date.now()
-      };
+    const confirmed = await showConfirm({
+      message: confirmMsg,
+    });
 
-      // Reset the log and notify the player about the new era
-      setLogs([
-        t('logs.era_started', { n: totalPoints }),
-        t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
-        ...logs
-      ].slice(0, 5));
-      setCurrentView('main');
-      
-      // Persist immediately so progress is not lost on a page reload
-      localStorage.setItem('idleGameSave', JSON.stringify(gameData.current));
+    if (!confirmed) {
+      return;
     }
+
+    const totalPoints = (gameData.current.prestigePoints || 0) + gain;
+    
+    // Build a clean new game state, then overlay prestige-persistent values
+    const newState = getNewGameState(); 
+    
+    gameData.current = {
+      ...newState,
+      prestigePoints: totalPoints,
+      prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
+      lastUpdate: Date.now()
+    };
+
+    // Reset the log and notify the player about the new era
+    setLogs([
+      t('logs.era_started', { n: totalPoints }),
+      t('logs.prestige_multiplier', { val: gameData.current.prestigeMultiplier.toFixed(1) }),
+      ...logs
+    ].slice(0, 5));
+    setCurrentView('main');
+    
+    // Persist immediately so progress is not lost on a page reload
+    saveGameToStorage(gameData.current);
+  };
+
+  // Helper to show confirmation modal (replaces window.confirm)
+  const showConfirm = (config) => {
+    return new Promise((resolve) => {
+      setConfirmModal({
+        show: true,
+        config: {
+          ...config,
+          onConfirm: () => {
+            resolve(true);
+            setConfirmModal({ show: false, config: {} });
+          },
+          onCancel: () => {
+            resolve(false);
+            setConfirmModal({ show: false, config: {} });
+          }
+        }
+      });
+    });
+  };
+
+  // Simpler version (non-promise):
+  const confirmAction = (config) => {
+    setConfirmModal({
+      show: true,
+      config
+    });
   };
 
   // --- VIEW DEFINITIONS ---
@@ -392,17 +473,149 @@ function App() {
     },
     achievements: () => (
       <AchievementsList achievementData={gameData.current.achievementData} t={t} />
-    )
+    ),
+    saveManager: () => (
+      <div className="card shadow-sm p-4 mt-2 border-0">
+        <h5>{t('save_manager.title')}</h5>
+        
+        {DEV_MODE && (
+          <div className="alert alert-warning mb-4">
+            {t('save_manager.dev_mode_warning')}
+          </div>
+        )}
+        
+        {/* EXPORT SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.export_section')}</h6>
+          <button 
+            className="btn btn-primary w-100"
+            onClick={() => {
+              try {
+                downloadSaveFile(gameData.current);
+                addLog(t('logs.export_ready'));
+              } catch (error) {
+                addLog(t('logs.import_failed', { error: error.message }));
+              }
+            }}
+          >
+            📥 {t('save_manager.download_file')}
+          </button>
+        </div>
+        
+        {/* IMPORT SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.import_section')}</h6>
+          <input 
+            type="file" 
+            className="form-control"
+            accept=".dat,.json"
+            onChange={async (e) => {
+              if (!e.target.files[0]) return;
+              
+              try {
+                const imported = await importSaveFile(e.target.files[0]);
+                gameData.current = { ...gameData.current, ...imported };
+                saveGameToStorage(gameData.current);
+                
+                showToast({
+                  type: 'success',
+                  title: t('save_manager.import_success_title'),
+                  message: t('save_manager.import_success'),
+                  position: 'top-right',
+                  duration: 4000,
+                  addToLog: true
+                });
+                
+                e.target.value = '';
+              } catch (error) {
+                showToast({
+                  type: 'error',
+                  title: t('save_manager.import_failed_title'),
+                  message: error.message,
+                  position: 'top-right',
+                  duration: 5000,
+                  addToLog: true
+                });
+              }
+            }}           
+          />
+        </div>
+        
+        {/* BACKUPS SECTION */}
+        <div className="mb-4">
+          <h6>{t('save_manager.backups_section')}</h6>
+          <div className="d-flex flex-wrap gap-2">
+            {listBackups().length === 0 ? (
+              <p className="text-muted small">{t('save_manager.no_backups')}</p>
+            ) : (
+              listBackups().map((backup) => (
+                <button 
+                  key={backup.index}
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => {
+                    confirmAction({
+                      title: t('save_manager.confirm_restore_title'),
+                      message: t('save_manager.confirm_restore', { date: backup.dateStr }),
+                      type: 'warning',
+                      confirmText: t('save_manager.restore_button'),
+                      cancelText: t('ui.cancel'),
+                      onConfirm: () => {
+                        try {
+                          const restored = restoreBackup(backup.index);
+                          const mergedState = mergeWithDefaults(restored);
+                          gameData.current = mergedState;
+                          saveGameToStorage(gameData.current);
+                          
+                          // Show success toast
+                          showToast({
+                            type: 'success',
+                            title: t('save_manager.backup_restored_title'),
+                            message: t('save_manager.backup_restored_message', { date: backup.dateStr }),
+                            position: 'top-right',
+                            duration: 4000,
+                            addToLog: true
+                          });
+                          
+                          addLog(t('logs.backup_restored'));
+                        } catch (error) {
+                          showToast({
+                            type: 'error',
+                            title: t('save_manager.restore_failed'),
+                            message: error.message,
+                            position: 'top-right',
+                            duration: 5000,
+                            addToLog: true
+                          });
+                        }
+                      }
+                    });
+                  }}
+                >
+                  {backup.dateStr}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+    ),
 
   };
 
   return (
     <div className="container py-4">
-      {/* Notyfikacja na górze */}
-      <AchievementNotification 
-        notifications={notifications} 
-        onRemove={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} 
-        t={t}
+      <ToastContainer /> 
+      
+      <ConfirmModal 
+        show={confirmModal.show}
+        title={confirmModal.config.title}
+        message={confirmModal.config.message}
+        type={confirmModal.config.type || 'info'}
+        confirmText={confirmModal.config.confirmText || 'Confirm'}
+        cancelText={confirmModal.config.cancelText || 'Cancel'}
+        onConfirm={() => confirmModal.config.onConfirm?.()}
+        onCancel={() => setConfirmModal({ show: false, config: {} })}
       />
       <nav className="navbar navbar-dark bg-dark rounded shadow-lg mb-4 px-3">
         <div className="d-flex align-items-center">
@@ -428,6 +641,9 @@ function App() {
           </button>
           <button className={`btn btn-sm ${currentView==='stats'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('stats')}>
             <Icons.BarChart3 size={16} className="me-1" /> {t('ui.stats')}
+          </button>
+          <button className={`btn btn-sm ${currentView==='saveManager'?'btn-light':'btn-outline-light'}`} onClick={() => setCurrentView('saveManager')}>
+            <Icons.Save size={16} className="me-1" /> {t('ui.save_manager')}
           </button>
           <button className="btn btn-sm btn-secondary ms-2" onClick={() => setCurrentView('menu')}>{t('ui.menu')}</button>
         </div>
