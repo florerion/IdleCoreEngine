@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getNewGameState, getInitialOwned, getInitialUpgrades, getInitialAchievementData } from './data/gameData';
+import { getNewGameState } from './data/gameData';
 import { BUILDINGS } from "./data/buildings";
 import { UPGRADES } from "./data/upgrades";
-import { calculateCurrentGPS, getBuildingCost, calculatePrestigeGain } from './logic/gameLogic';
+import {
+  calculateCurrentGPS,
+  getBuildingCost,
+  calculatePrestigeGain,
+  processProductionCycles,
+  getBuildingCycleTimeMs,
+  getBuildingRatePerSecond,
+  getBuildingProgressPercent,
+} from './logic/gameLogic';
 import ProgressButton from './components/ProgressButton';
 import BuildingProgressBar from './components/BuildingProgressBar';
 import Logger from './components/Logger';
@@ -47,6 +55,11 @@ const mergeWithDefaults = (savedState) => {
     ...((savedState && savedState.upgrades) || {}),
   };
 
+  const mergedBuildingCycleProgress = {
+    ...(defaults.buildingCycleProgress || {}),
+    ...((savedState && savedState.buildingCycleProgress) || {}),
+  };
+
   const mergedAchievementData = {
     ...(defaults.achievementData || {}),
     ...((savedState && savedState.achievementData) || {}),
@@ -56,6 +69,7 @@ const mergeWithDefaults = (savedState) => {
     ...defaults,
     ...(savedState || {}),
     owned: mergedOwned,
+    buildingCycleProgress: mergedBuildingCycleProgress,
     upgrades: mergedUpgrades,
     achievementData: mergedAchievementData,
   };
@@ -68,6 +82,7 @@ function App() {
   const [displayGPS, setDisplayGPS] = useState(0);
   const [lang, setLang] = useState('pl');
   const [confirmModal, setConfirmModal] = useState({ show: false, config: {} });
+  const [frameCounter, setFrameCounter] = useState(0);
   
   const { showToast } = useToast();
 
@@ -89,6 +104,7 @@ function App() {
   };
 
   const gameData = useRef(getNewGameState());
+  const lastTickTimeRef = useRef(Date.now());
 
   /**
    * Prepends a message to the activity log and keeps only the 5 most recent entries.
@@ -102,8 +118,6 @@ function App() {
    * @param {string} achievementId - ID of unlocked achievement
    */
   const showAchievementNotification = (achievementId) => {
-    const ach = ACHIEVEMENTS[achievementId];
-    
     showToast({
       type: 'achievement',
       title: t(`achievements.${achievementId}.name`),
@@ -121,30 +135,22 @@ function App() {
       const saved = loadGameFromStorage();
       if (saved) {
         const now = Date.now();
-        const secondsAway = Math.floor((now - (saved.lastUpdate || now)) / 1000);
+        const offlineMs = Math.max(0, now - (saved.lastUpdate || now));
+        const secondsAway = Math.floor(offlineMs / 1000);
 
-        // Merge loaded state with fresh data structures
-        const freshOwned = getInitialOwned();
-        const freshUpgrades = getInitialUpgrades();
-        const freshAchievements = getInitialAchievementData();
-        
-        gameData.current = {
-          ...saved,
-          owned: { ...freshOwned, ...saved.owned },
-          upgrades: { ...freshUpgrades, ...saved.upgrades },
-          achievementData: { ...freshAchievements, ...saved.achievementData },
-          lastUpdate: now
-        };
+        // Merge loaded state with current schema before applying offline simulation.
+        gameData.current = mergeWithDefaults(saved);
 
-        // Handle offline earnings
-        if (secondsAway > 10) {
-          const gps = calculateCurrentGPS(gameData.current);
-          const earned = Math.floor(gps * secondsAway);
+        // Handle offline earnings using building cycle simulation.
+        if (offlineMs > 10000) {
+          const { earnedGold } = processProductionCycles(gameData.current, offlineMs);
+          const earned = Math.floor(earnedGold);
           if (earned > 0) {
-            gameData.current.gold += earned;
             addLog(t('ui.offline_msg', { time: Math.floor(secondsAway / 60), earned: earned.toLocaleString() }));
           }
         }
+
+        gameData.current.lastUpdate = now;
       }
     } catch (error) {
       console.error('Failed to load save:', error);
@@ -155,13 +161,15 @@ function App() {
     // Main game tick - update every 50ms
     const interval = setInterval(() => {
       const now = Date.now();
-      const dt = (now - gameData.current.lastUpdate) / 1000;
+      const elapsedMs = Math.max(0, now - gameData.current.lastUpdate);
       gameData.current.lastUpdate = now;
-      
+
+      processProductionCycles(gameData.current, elapsedMs);
+      lastTickTimeRef.current = now;
+
       const gps = calculateCurrentGPS(gameData.current);
       gameData.current.gps = gps;
-      gameData.current.gold += (gps * dt);
-      
+
       setDisplayGold(Math.floor(gameData.current.gold));
       setDisplayGPS(gps);
     }, 50);
@@ -184,10 +192,19 @@ function App() {
       }
     }, 5000);
 
+    // Animation frame loop - triggers re-render every frame for smooth progress bar animation
+    let animationFrameId;
+    const animationLoop = () => {
+      setFrameCounter(c => c + 1);
+      animationFrameId = requestAnimationFrame(animationLoop);
+    };
+    animationFrameId = requestAnimationFrame(animationLoop);
+
     return () => { 
       clearInterval(interval); 
       clearInterval(achievementCheckInterval);
       clearInterval(saveInt);
+      cancelAnimationFrame(animationFrameId);
     };
   }, []);
 
@@ -227,8 +244,12 @@ function App() {
     if (gameData.current.gold >= upg.cost && !gameData.current.upgrades[id]) {
       gameData.current.gold -= upg.cost;
       gameData.current.upgrades[id] = true;
-      if (upg.type === 'click') gameData.current.clickPower *= upg.multiplier;
-      if (upg.type === 'global') gameData.current.globalMultiplier *= upg.multiplier;
+      if (upg.type === 'click' && Number.isFinite(upg.multiplier)) {
+        gameData.current.clickPower *= upg.multiplier;
+      }
+      if (upg.type === 'global' && Number.isFinite(upg.multiplier)) {
+        gameData.current.globalMultiplier *= upg.multiplier;
+      }
       addLog(t('logs.buy_upgrade', { name: t(`upgrades.${id}.name`) }));
 
       const newAchievements = checkAchievements(gameData.current);
@@ -277,7 +298,6 @@ function App() {
       ...newState,
       prestigePoints: totalPoints,
       prestigeMultiplier: 1 + (totalPoints * 0.1), // Each point grants +10% production
-      lastUpdate: Date.now()
     };
 
     // Reset the log and notify the player about the new era
@@ -361,6 +381,10 @@ function App() {
                 const IconComponent = Icons[b.icon] || Icons.HelpCircle;
                 const count = gameData.current.owned[b.id];
                 const cost = getBuildingCost(b.id, count);
+                const elapsedSinceLastTickMs = Date.now() - lastTickTimeRef.current;
+                const cycleProgressPercent = count > 0
+                  ? getBuildingProgressPercent(b.id, gameData.current, elapsedSinceLastTickMs)
+                  : 0;
                 if (count === 0 && displayGold < b.baseCost * 0.7) return null;
 
                 return (
@@ -379,7 +403,7 @@ function App() {
                             {/* Progress bar and coins are rendered only when the building is owned */}
                             {count > 0 && (
                               <div style={{ position: 'absolute', bottom: '-2px', left: '4px', right: '4px' }}>
-                                <BuildingProgressBar interval={1000} />
+                                <BuildingProgressBar progressPercent={cycleProgressPercent} />
                               </div>
                             )}
                           </div>
@@ -446,6 +470,79 @@ function App() {
           <div className="col-4 border-end"><h6>{t('stats.speed')}</h6><p className="h4 text-info">{displayGPS.toFixed(1)}/s</p></div>
           <div className="col-4"><h6>{t('stats.click')}</h6><p className="h4 text-success">{gameData.current.clickPower}</p></div>
         </div>
+
+        <div className="mt-4 text-start">
+          <h6 className="mb-3">{t('stats.cycles_title')}</h6>
+
+          {/* Global cycle modifier info */}
+          {(() => {
+            let globalCycleMultiplier = 1;
+            let globalCycleAdditive = 0;
+
+            Object.values(UPGRADES).forEach((upg) => {
+              if (!gameData.current.upgrades[upg.id]) return;
+              if (upg.type !== 'global') return;
+              if (!upg.cycleTimeEffect) return;
+
+              if (upg.cycleTimeEffect.mode === 'multiplicative') {
+                globalCycleMultiplier *= upg.cycleTimeEffect.value;
+              } else if (upg.cycleTimeEffect.mode === 'additive') {
+                globalCycleAdditive += upg.cycleTimeEffect.value;
+              }
+            });
+
+            if (globalCycleMultiplier !== 1 || globalCycleAdditive !== 0) {
+              return (
+                <div className="alert alert-info mb-3 py-2 px-3">
+                  <small>
+                    {t('stats.cycles_global_modifier')}: 
+                    {globalCycleMultiplier !== 1 && <span> ×{globalCycleMultiplier.toFixed(2)}</span>}
+                    {globalCycleAdditive !== 0 && <span> {globalCycleAdditive > 0 ? '+' : ''}{globalCycleAdditive}ms</span>}
+                  </small>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+          {Object.values(BUILDINGS).filter((b) => (gameData.current.owned[b.id] || 0) > 0).length === 0 ? (
+            <p className="text-muted small m-0">{t('stats.cycles_empty')}</p>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>{t('stats.cycles_building')}</th>
+                    <th className="text-end">{t('stats.cycles_time')}</th>
+                    <th className="text-end">{t('stats.cycles_progress')}</th>
+                    <th className="text-end">{t('stats.cycles_payout')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.values(BUILDINGS)
+                    .filter((b) => (gameData.current.owned[b.id] || 0) > 0)
+                    .map((b) => {
+                      const cycleTimeMs = getBuildingCycleTimeMs(b.id, gameData.current);
+                      const cycleProgressMs = gameData.current.buildingCycleProgress[b.id] || 0;
+                      const progressPercent = Math.min(100, (cycleProgressMs / cycleTimeMs) * 100);
+                      const ratePerSecond = getBuildingRatePerSecond(b.id, gameData.current);
+                      const payoutPerCycle = ratePerSecond * (cycleTimeMs / 1000);
+
+                      return (
+                        <tr key={`stats-cycle-${b.id}`}>
+                          <td>{t(`buildings.${b.id}.name`)}</td>
+                          <td className="text-end">{(cycleTimeMs / 1000).toFixed(2)}s</td>
+                          <td className="text-end">{progressPercent.toFixed(1)}%</td>
+                          <td className="text-end text-warning">{Math.floor(payoutPerCycle).toLocaleString()} 💰</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         <button className="btn btn-secondary mt-4" onClick={() => setCurrentView('main')}>{t('stats.back')}</button>
       </div>
     ),
@@ -514,7 +611,8 @@ function App() {
               
               try {
                 const imported = await importSaveFile(e.target.files[0]);
-                gameData.current = { ...gameData.current, ...imported };
+                gameData.current = mergeWithDefaults(imported);
+                gameData.current.lastUpdate = Date.now();
                 saveGameToStorage(gameData.current);
                 
                 showToast({

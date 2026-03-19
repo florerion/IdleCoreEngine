@@ -5,13 +5,14 @@
  * @property {string} icon - Icon component name from the lucide-react library
  * @property {number} baseCost - Base purchase cost before exponential scaling
  * @property {number} baseRate - Base gold production rate per second (unmodified)
+ * @property {number} cycleTime - Production cycle duration in milliseconds
  * @property {string} description - Short display description of the building
  */
 
 /**
  * Registry of all available buildings in the game.
- * Each building produces gold per second based on its baseRate, which can be
- * further scaled by upgrades and global multipliers.
+ * Each building defines its production pacing with cycleTime (ms), while
+ * baseRate remains the average per-second output used by production logic.
  *
  * @type {Object.<string, BuildingDefinition>}
  * @example
@@ -26,6 +27,7 @@ export const BUILDINGS = {
     icon: 'Pickaxe',
     baseCost: 15, 
     baseRate: 1, 
+    cycleTime: 1000,
     description: 'Wydobywa 1/s' 
   },
   drill: { 
@@ -34,6 +36,7 @@ export const BUILDINGS = {
     icon: 'Drill', 
     baseCost: 100, 
     baseRate: 5, 
+    cycleTime: 5000,
     description: 'Generuje 5/s' 
   },
   factory: { 
@@ -42,6 +45,7 @@ export const BUILDINGS = {
     icon: 'Factory', 
     baseCost: 1000, 
     baseRate: 25, 
+    cycleTime: 10000,
     description: 'Produkcja 25/s' 
   }
 };

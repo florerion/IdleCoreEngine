@@ -2,6 +2,100 @@ import { BUILDINGS } from "../data/buildings";
 import { UPGRADES } from "../data/upgrades";
 import { ACHIEVEMENTS } from "../data/achievements";
 
+export const MIN_BUILDING_CYCLE_MS = 10;
+
+const assertBuildingExists = (buildingId) => {
+  if (!BUILDINGS[buildingId]) {
+    throw new TypeError(`Unknown building id: ${buildingId}`);
+  }
+};
+
+const shouldApplyUpgradeToBuilding = (upgrade, buildingId) => {
+  if (upgrade.type === 'global') return true;
+  if (upgrade.type === 'building') return upgrade.targets?.includes(buildingId);
+  return false;
+};
+
+/**
+ * Calculates effective cycle duration for a building.
+ * Supports developer-defined upgrade effects using additive and multiplicative modes.
+ * Applies a hard lower bound via MIN_BUILDING_CYCLE_MS.
+ *
+ * @param {string} buildingId - Building identifier (key in BUILDINGS)
+ * @param {import('../data/gameData').GameState} data - Current game state
+ * @returns {number} Effective cycle duration in milliseconds
+ * @throws {TypeError} If the building ID is invalid or cycle effect mode is unsupported
+ * @example
+ * const cycleMs = getBuildingCycleTimeMs('factory', gameData.current);
+ * // 10000 by default, or lower/higher if upgrades define cycleTimeEffect
+ */
+export const getBuildingCycleTimeMs = (buildingId, data) => {
+  assertBuildingExists(buildingId);
+
+  let effectiveCycleTime = BUILDINGS[buildingId].cycleTime;
+
+  if (!Number.isFinite(effectiveCycleTime) || effectiveCycleTime <= 0) {
+    throw new TypeError(`Invalid base cycleTime for building: ${buildingId}`);
+  }
+
+  Object.values(UPGRADES).forEach((upgrade) => {
+    if (!data.upgrades[upgrade.id]) return;
+    if (!shouldApplyUpgradeToBuilding(upgrade, buildingId)) return;
+
+    const effect = upgrade.cycleTimeEffect;
+    if (!effect) return;
+
+    if (effect.mode === 'additive') {
+      effectiveCycleTime += effect.value;
+      return;
+    }
+
+    if (effect.mode === 'multiplicative') {
+      effectiveCycleTime *= effect.value;
+      return;
+    }
+
+    throw new TypeError(
+      `Invalid cycleTimeEffect mode for upgrade ${upgrade.id}: ${effect.mode}`
+    );
+  });
+
+  return Math.max(MIN_BUILDING_CYCLE_MS, effectiveCycleTime);
+};
+
+/**
+ * Calculates effective per-second production of one building type.
+ * Includes owned count, building-specific upgrades, global multiplier, and prestige multiplier.
+ *
+ * @param {string} buildingId - Building identifier (key in BUILDINGS)
+ * @param {import('../data/gameData').GameState} data - Current game state
+ * @returns {number} Effective per-second production for the building type
+ * @throws {TypeError} If `buildingId` does not correspond to a defined building
+ * @example
+ * const rate = getBuildingRatePerSecond('miner', gameData.current);
+ * // e.g. 12.5
+ */
+export const getBuildingRatePerSecond = (buildingId, data) => {
+  assertBuildingExists(buildingId);
+
+  const ownedCount = data.owned[buildingId] || 0;
+  let rate = BUILDINGS[buildingId].baseRate * ownedCount;
+
+  Object.values(UPGRADES).forEach((upgrade) => {
+    if (!data.upgrades[upgrade.id]) return;
+
+    if (
+      upgrade.type === 'building' &&
+      upgrade.targets?.includes(buildingId) &&
+      Number.isFinite(upgrade.multiplier)
+    ) {
+      rate *= upgrade.multiplier;
+    }
+  });
+
+  return rate * (data.globalMultiplier || 1) * (data.prestigeMultiplier || 1);
+};
+
 /**
  * Calculates the total gold-per-second (GPS) production for the current game state.
  * For each building, the base rate is multiplied by the owned count, then further
@@ -16,16 +110,93 @@ import { ACHIEVEMENTS } from "../data/achievements";
  */
 export const calculateCurrentGPS = (data) => {
   let totalGPS = 0;
-  Object.keys(BUILDINGS).forEach(id => {
-    let rate = BUILDINGS[id].baseRate * data.owned[id];
-    // Apply building-specific upgrade multipliers
-    Object.values(UPGRADES).forEach(upg => {
-      if (data.upgrades[upg.id] && upg.targets?.includes(id)) rate *= upg.multiplier;
-    });
-    totalGPS += rate;
+  Object.keys(BUILDINGS).forEach((buildingId) => {
+    totalGPS += getBuildingRatePerSecond(buildingId, data);
   });
-  // Apply global and prestige multipliers on top of the summed building output
-  return totalGPS * (data.globalMultiplier || 1) * (data.prestigeMultiplier || 1);
+
+  return totalGPS;
+};
+
+/**
+ * Advances production cycles for all owned buildings and applies completed payouts.
+ * Cycle progress is tracked per building in `data.buildingCycleProgress`, so partial
+ * progress survives both active play and offline time calculations.
+ * Also updates `buildingLastPayoutTime` when payouts occur for smooth progress rendering.
+ *
+ * @param {import('../data/gameData').GameState} data - Current game state (mutated)
+ * @param {number} elapsedMs - Elapsed real time in milliseconds to process
+ * @returns {{earnedGold: number, cycleCompletions: Object.<string, number>}} Earned gold and completed cycles per building
+ * @throws {RangeError} If elapsedMs is negative or not finite
+ * @example
+ * const { earnedGold } = processProductionCycles(gameData.current, 5000);
+ * console.log('Gold gained:', earnedGold);
+ */
+export const processProductionCycles = (data, elapsedMs) => {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    throw new RangeError('elapsedMs must be a finite non-negative number');
+  }
+
+  if (!data.buildingCycleProgress || typeof data.buildingCycleProgress !== 'object') {
+    data.buildingCycleProgress = {};
+  }
+
+  let earnedGold = 0;
+  const cycleCompletions = {};
+
+  Object.keys(BUILDINGS).forEach((buildingId) => {
+    const ownedCount = data.owned[buildingId] || 0;
+
+    if (ownedCount <= 0) {
+      data.buildingCycleProgress[buildingId] = 0;
+      return;
+    }
+
+    const cycleTimeMs = getBuildingCycleTimeMs(buildingId, data);
+    const ratePerSecond = getBuildingRatePerSecond(buildingId, data);
+    const currentProgressMs = data.buildingCycleProgress[buildingId] || 0;
+    const progressedMs = currentProgressMs + elapsedMs;
+    const completedCycles = Math.floor(progressedMs / cycleTimeMs);
+    const nextProgressMs = progressedMs % cycleTimeMs;
+
+    if (completedCycles > 0 && ratePerSecond > 0) {
+      const payoutPerCycle = ratePerSecond * (cycleTimeMs / 1000);
+      const payout = completedCycles * payoutPerCycle;
+      data.gold += payout;
+      earnedGold += payout;
+      cycleCompletions[buildingId] = completedCycles;
+    }
+
+    data.buildingCycleProgress[buildingId] = nextProgressMs;
+  });
+
+  return { earnedGold, cycleCompletions };
+};
+
+/**
+ * Gets the interpolated progress percentage (0-100) for a building's current production cycle.
+ * Smoothly interpolates between game ticks by adding elapsed time since the last tick.
+ *
+ * @param {string} buildingId - Building identifier (key in BUILDINGS)
+ * @param {import('../data/gameData').GameState} data - Current game state
+ * @param {number} elapsedSinceLastTickMs - Milliseconds elapsed since the last game tick (0 to ~17ms in 60fps)
+ * @returns {number} Interpolated progress percentage (0-100, capped at 100)
+ * @throws {TypeError} If the building ID is invalid
+ * @example
+ * const elapsedMs = Date.now() - lastTickTime;
+ * const progress = getBuildingProgressPercent('factory', gameData.current, elapsedMs);
+ * // Returns 45.3 (smooth interpolated value between ticks)
+ */
+export const getBuildingProgressPercent = (buildingId, data, elapsedSinceLastTickMs = 0) => {
+  assertBuildingExists(buildingId);
+
+  const ownedCount = data.owned[buildingId] || 0;
+  if (ownedCount <= 0) return 0;
+
+  const cycleTimeMs = getBuildingCycleTimeMs(buildingId, data);
+  const currentProgressMs = (data.buildingCycleProgress[buildingId] || 0) + elapsedSinceLastTickMs;
+  const progressPercent = (currentProgressMs / cycleTimeMs) * 100;
+
+  return Math.min(100, progressPercent);
 };
 
 /**
@@ -42,6 +213,7 @@ export const calculateCurrentGPS = (data) => {
  * // Math.floor(15 * 1.15^5) = 30
  */
 export const getBuildingCost = (id, ownedCount) => {
+  assertBuildingExists(id);
   return Math.floor(BUILDINGS[id].baseCost * Math.pow(1.15, ownedCount));
 };
 

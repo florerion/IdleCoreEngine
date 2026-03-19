@@ -18,6 +18,7 @@ import { UPGRADES } from "./upgrades";
  * @property {number} prestigePoints - Accumulated prestige points across resets
  * @property {number} prestigeMultiplier - Bonus multiplier derived from prestige points
  * @property {Object.<string, number>} owned - Map of building ID to owned count
+ * @property {Object.<string, number>} buildingCycleProgress - Map of building ID to cycle progress in milliseconds
  * @property {Object.<string, boolean>} upgrades - Map of upgrade ID to purchased state
  * @property {Object.<string, AchievementState>} achievementData - Per-achievement runtime data
  * @property {number} lastUpdate - Timestamp (ms) of the last game tick
@@ -55,6 +56,19 @@ export const getInitialOwned = () =>
   Object.keys(BUILDINGS).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
 
 /**
+ * Creates a fresh map for per-building cycle progress.
+ * Each value stores elapsed milliseconds in the current cycle,
+ * allowing partial progress to persist across saves and offline time.
+ *
+ * @returns {Object.<string, number>} Map of building ID to cycle progress in ms
+ * @example
+ * const progress = getInitialBuildingCycleProgress();
+ * // { miner: 0, drill: 0, factory: 0 }
+ */
+export const getInitialBuildingCycleProgress = () =>
+  Object.keys(BUILDINGS).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
+/**
  * Creates a fresh upgrades-purchased map with all upgrades set to false.
  * Ensures every upgrade key exists even if the save file predates new upgrades.
  *
@@ -85,6 +99,7 @@ export const getNewGameState = () => ({
   prestigePoints: 0,
   prestigeMultiplier: 1,
   owned: getInitialOwned(),
+  buildingCycleProgress: getInitialBuildingCycleProgress(),
   upgrades: getInitialUpgrades(),
   achievementData: getInitialAchievementData(),
   lastUpdate: Date.now()
